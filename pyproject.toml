@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fronius-modbus"
+version = "0.1.0"
+description = "Library for Fronius inverter Modbus TCP (SunSpec) interfaces, built on modbus-connection"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Matthias Alphart", email = "farmio@alphart.net" }]
+requires-python = ">=3.12"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Home Automation",
+]
+dependencies = ["modbus-connection>=3.4.1"]
+
+[project.urls]
+Homepage = "https://github.com/farmio/fronius-modbus"
+Repository = "https://github.com/farmio/fronius-modbus"
+Changelog = "https://github.com/farmio/fronius-modbus/releases"
+
+[dependency-groups]
+dev = [
+  "mypy>=1.14",
+  "pytest>=8",
+  "pytest-asyncio>=0.25",
+  "ruff>=0.9",
+]
+
+[tool.hatch.build.targets.sdist]
+include = ["fronius_modbus"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["fronius_modbus"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+  "A",     # builtins shadowing
+  "ASYNC", # async checks
+  "B",     # bugbear
+  "D",     # pydocstyle
+  "E",     # pycodestyle errors
+  "F",     # pyflakes
+  "I",     # isort
+  "RUF",   # ruff specific
+  "SIM",   # simplify
+  "UP",    # pyupgrade
+]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
