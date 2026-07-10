@@ -36,12 +36,10 @@ from modbus_connection.tmodbus import connect_tcp
 
 async def main() -> None:
     connection = await connect_tcp("192.168.1.50", port=502)
-    inverter = FroniusModbusInverter(
-        connection.for_unit(GEN24_UNIT_ID),
-        has_storage=True,  # hint for MPPT module role classification
-    )
+    inverter = FroniusModbusInverter(connection.for_unit(GEN24_UNIT_ID))
     await inverter.discover()
     print("Data type:", "float" if inverter.float_mode else "int+SF")
+    print("Storage:", inverter.has_storage)  # auto-detected during discovery
 
     if inverter.has_mppt:
         data = await inverter.read_mppt()

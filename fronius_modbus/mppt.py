@@ -100,20 +100,21 @@ class MpptData:
 def classify_modules(id_strs: list[str], has_storage: bool) -> list[ModuleRole]:
     """Determine the role of each MPPT module.
 
-    Storage-related ID strings are matched first. When they are inconclusive
-    and the system has a storage, a 4-module inverter is assumed to be a
-    GEN24 hybrid exposing dedicated charge/discharge modules after the PV
-    strings. Everything else defaults to PV - including module 2 of a Symo
-    Hybrid, which is safe since those don't support lifetime energy anyway
-    and a plain 2-MPPT inverter in a SolarNet ring with a hybrid would
-    otherwise get wrong PV totals.
+    Storage-related ID strings are matched first - GEN24 hybrids name their
+    modules "MPPT 1", "MPPT 2", "StCha 3" and "StDisCha 4". When the names
+    are inconclusive and the system has a storage, a 4-module inverter is
+    assumed to be a hybrid exposing dedicated charge/discharge modules after
+    the PV strings. Everything else defaults to PV - including module 2 of a
+    Symo Hybrid, which is safe since those don't support lifetime energy
+    anyway and a plain 2-MPPT inverter in a SolarNet ring with a hybrid
+    would otherwise get wrong PV totals.
     """
     roles: list[ModuleRole | None] = []
     for id_str in id_strs:
         name = id_str.lower()
-        if "discharge" in name:
+        if "discha" in name:  # "StDisCha 4" / "discharge"
             roles.append(ModuleRole.STORAGE_DISCHARGE)
-        elif "charge" in name:
+        elif "cha" in name:  # "StCha 3" / "charge"
             roles.append(ModuleRole.STORAGE_CHARGE)
         elif "bat" in name or "storage" in name:
             roles.append(ModuleRole.STORAGE_BIDIRECTIONAL)

@@ -7,16 +7,17 @@ from fronius_modbus import FroniusModbusInverter, ModuleRole, MpptData
 from fronius_modbus.mppt import classify_modules
 from fronius_modbus.testing import MpptModuleSpec, build_sunspec_map
 
+# module names as reported by real GEN24 hybrid inverters
 GEN24_HYBRID_MODULES = [
     MpptModuleSpec(
-        id_str="String 1", current=82, voltage=4021, power=3300, energy=1_000_000
+        id_str="MPPT 1", current=82, voltage=4021, power=3300, energy=1_000_000
     ),
     MpptModuleSpec(
-        id_str="String 2", current=41, voltage=4022, power=1650, energy=500_000
+        id_str="MPPT 2", current=41, voltage=4022, power=1650, energy=500_000
     ),
-    MpptModuleSpec(id_str="unnamed 3", current=0, voltage=0, power=0, energy=200_000),
+    MpptModuleSpec(id_str="StCha 3", current=0, voltage=0, power=0, energy=200_000),
     MpptModuleSpec(
-        id_str="unnamed 4", current=12, voltage=3990, power=480, energy=150_000
+        id_str="StDisCha 4", current=12, voltage=3990, power=480, energy=150_000
     ),
 ]
 
@@ -37,7 +38,7 @@ async def test_scaled_values(mock_modbus_unit: MockModbusUnit) -> None:
     )
     module_1 = data.modules[0]
     assert module_1.index == 1
-    assert module_1.id_str == "String 1"
+    assert module_1.id_str == "MPPT 1"
     assert module_1.current == 8.2  # scale factor -1
     assert module_1.voltage == 402.1
     assert module_1.power == 3300  # scale factor 0
@@ -82,15 +83,31 @@ async def test_derived_totals_gen24_hybrid(mock_modbus_unit: MockModbusUnit) -> 
     assert data.storage_discharge_energy_total == 150_000
 
 
-async def test_derived_totals_without_storage(
+async def test_storage_modules_matched_by_name_without_storage_hint(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
-    """Test all modules default to PV without a storage."""
+    """Test named storage modules are classified even without a storage hint."""
     data = await _read_mppt(
         mock_modbus_unit, build_sunspec_map(GEN24_HYBRID_MODULES), has_storage=False
     )
+    assert data.pv_energy_total == 1_500_000
+    assert data.storage_charge_energy_total == 200_000
+    assert data.storage_discharge_energy_total == 150_000
+
+
+async def test_derived_totals_without_storage(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Test unnamed modules default to PV without a storage (e.g. Tauro)."""
+    modules = [
+        MpptModuleSpec(id_str=f"String {number}", energy=1_000_000)
+        for number in range(1, 5)
+    ]
+    data = await _read_mppt(
+        mock_modbus_unit, build_sunspec_map(modules), has_storage=False
+    )
     assert all(module.role is ModuleRole.PV for module in data.modules)
-    assert data.pv_energy_total == 1_850_000
+    assert data.pv_energy_total == 4_000_000
     assert data.storage_charge_energy_total is None
     assert data.storage_discharge_energy_total is None
 
@@ -120,6 +137,17 @@ async def test_pv_total_none_when_energy_missing(
             False,
             [ModuleRole.PV, ModuleRole.PV],
             id="plain_pv",
+        ),
+        pytest.param(
+            ["MPPT 1", "MPPT 2", "StCha 3", "StDisCha 4"],
+            False,
+            [
+                ModuleRole.PV,
+                ModuleRole.PV,
+                ModuleRole.STORAGE_CHARGE,
+                ModuleRole.STORAGE_DISCHARGE,
+            ],
+            id="gen24_hybrid_real_names",
         ),
         pytest.param(
             ["String 1", "String 2", "unnamed", "unnamed"],
