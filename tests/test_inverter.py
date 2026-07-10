@@ -1,9 +1,12 @@
 """Tests for the FroniusModbusInverter device class."""
 
+from unittest.mock import patch
+
 import pytest
 from modbus_connection.mock import MockModbusUnit
 
 from fronius_modbus import FroniusModbusInverter, SunSpecError, datamanager_unit_id
+from fronius_modbus.sunspec import MULTI_MPPT_MODEL_ID
 from fronius_modbus.testing import MpptModuleSpec, build_sunspec_map
 
 MODULES = [
@@ -112,6 +115,44 @@ async def test_broken_register_map(mock_modbus_unit: MockModbusUnit) -> None:
     mock_modbus_unit.holding.clear()
     with pytest.raises(SunSpecError):
         await inverter.read_mppt()
+
+
+async def test_scale_factors_read_atomically_with_values(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Test one request covers the scale factors and all module values.
+
+    Scale factors can change at runtime (e.g. shifted by the device as
+    accumulators grow), so values and their scale factors must never come
+    from separate requests where they could diverge.
+    """
+    modules = [
+        MpptModuleSpec(id_str=f"MPPT {number}", current=10, energy=1_000)
+        for number in range(1, 5)
+    ]
+    mock_modbus_unit.holding.update(build_sunspec_map(modules))
+    inverter = FroniusModbusInverter(mock_modbus_unit)
+    await inverter.discover()
+
+    with patch.object(
+        mock_modbus_unit,
+        "read_holding_registers",
+        wraps=mock_modbus_unit.read_holding_registers,
+    ) as spy:
+        await inverter.read_mppt()
+
+    model = next(
+        model for model in inverter.model_chain if model.model_id == MULTI_MPPT_MODEL_ID
+    )
+    data_address = model.address + 2
+    first_scale_factor = data_address  # DCA_SF
+    last_value_register = data_address + 8 + 3 * 20 + 13  # module 4 DCWH high word
+    covering_requests = [
+        (address, count)
+        for address, count in (call.args for call in spy.call_args_list)
+        if address <= first_scale_factor and address + count > last_value_register
+    ]
+    assert len(covering_requests) == 1
 
 
 def test_datamanager_unit_id() -> None:
