@@ -217,6 +217,7 @@ def build_sunspec_map(
     storage_wcha_max: int | None = None,
     storage_soc: float | None = None,
     storage_state: int | None = None,
+    storage_min_reserve: float | None = None,
     inverter: InverterModelSpec | None = None,
     manufacturer: str = "Fronius",
     device_model: str = "Test Model",
@@ -258,6 +259,14 @@ def build_sunspec_map(
     else:
         add_model(103, _int_sf_inverter_data(inverter_spec))
 
+    # Immediate Controls: no active limit, WMaxLimPct at 100%
+    controls_data = [0] * 24
+    controls_data[2] = 1  # Conn: connected
+    controls_data[3] = 10000  # WMaxLimPct
+    controls_data[21] = _sf_word(-2)  # WMaxLimPct_SF
+    controls_data[22] = _sf_word(-3)  # OutPFSet_SF
+    add_model(123, controls_data)
+
     if include_mppt_model:
         data = [
             current_sf & 0xFFFF,
@@ -290,6 +299,11 @@ def build_sunspec_map(
     if storage_wcha_max is not None:
         storage_data = [0] * 24
         storage_data[0] = storage_wcha_max  # WChaMax
+        storage_data[5] = (  # MinRsvPct, encoded with MinRsvPct_SF -2
+            _scaled_word(storage_min_reserve, -2)
+            if storage_min_reserve is not None
+            else NOT_IMPLEMENTED_UINT16
+        )
         storage_data[6] = (  # ChaState, encoded with ChaState_SF -2
             _scaled_word(storage_soc, -2)
             if storage_soc is not None
@@ -299,7 +313,9 @@ def build_sunspec_map(
             storage_state if storage_state is not None else NOT_IMPLEMENTED_UINT16
         )
         storage_data[16] = _sf_word(0)  # WChaMax_SF
+        storage_data[19] = _sf_word(-2)  # MinRsvPct_SF
         storage_data[20] = _sf_word(-2)  # ChaState_SF
+        storage_data[23] = _sf_word(-2)  # InOutWRte_SF
         add_model(124, storage_data)
 
     # end model marker

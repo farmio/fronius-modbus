@@ -17,7 +17,8 @@ async def test_discover_models(mock_modbus_unit: MockModbusUnit) -> None:
     assert models == [
         SunSpecModel(model_id=1, address=40002, length=66),
         SunSpecModel(model_id=113, address=40070, length=60),
-        SunSpecModel(model_id=160, address=40132, length=28),
+        SunSpecModel(model_id=123, address=40132, length=24),
+        SunSpecModel(model_id=160, address=40158, length=28),
     ]
 
 

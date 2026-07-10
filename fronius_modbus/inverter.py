@@ -6,11 +6,13 @@ from typing import Final
 from modbus_connection import ModbusUnit
 
 from .common import DeviceIdentity, DeviceIdentityReader, build_device_identity_reader
+from .controls import ImmediateControls, PowerLimit, build_immediate_controls
 from .inverter_model import InverterData, InverterDataReader, build_inverter_reader
 from .mppt import MpptData, MpptReader, build_mppt_reader
-from .storage import WCHA_MAX, StorageData, StorageDataReader, build_storage_reader
+from .storage import WCHA_MAX, StorageControls, StorageData, build_storage_controls
 from .sunspec import (
     COMMON_MODEL_ID,
+    IMMEDIATE_CONTROLS_MODEL_ID,
     INVERTER_MODELS_FLOAT,
     INVERTER_MODELS_INT_SF,
     MULTI_MPPT_MODEL_ID,
@@ -53,7 +55,8 @@ class FroniusModbusInverter:
         self._device_identity_reader: DeviceIdentityReader | None = None
         self._inverter_reader: InverterDataReader | None = None
         self._mppt_reader: MpptReader | None = None
-        self._storage_reader: StorageDataReader | None = None
+        self._storage: StorageControls | None = None
+        self._controls: ImmediateControls | None = None
         self.float_mode: bool | None = None
         self.has_storage: bool | None = has_storage
 
@@ -95,9 +98,15 @@ class FroniusModbusInverter:
             else None
         )
         storage_model = self._find_model(STORAGE_MODEL_ID)
-        self._storage_reader = (
-            build_storage_reader(self._unit, storage_model)
+        self._storage = (
+            build_storage_controls(self._unit, storage_model)
             if storage_model is not None
+            else None
+        )
+        controls_model = self._find_model(IMMEDIATE_CONTROLS_MODEL_ID)
+        self._controls = (
+            build_immediate_controls(self._unit, controls_model)
+            if controls_model is not None
             else None
         )
 
@@ -143,7 +152,12 @@ class FroniusModbusInverter:
     @property
     def has_storage_model(self) -> bool:
         """Return whether the device exposes the Basic Storage Control model."""
-        return self._storage_reader is not None
+        return self._storage is not None
+
+    @property
+    def has_immediate_controls(self) -> bool:
+        """Return whether the device exposes the Immediate Controls model."""
+        return self._controls is not None
 
     async def read_device_identity(self) -> DeviceIdentity:
         """Read manufacturer, model, version and serial from the Common model."""
@@ -158,8 +172,103 @@ class FroniusModbusInverter:
         return await self._read(lambda: self._mppt_reader, "Multiple MPPT")
 
     async def read_storage(self) -> StorageData:
-        """Read state of charge and status from the storage model."""
-        return await self._read(lambda: self._storage_reader, "Storage")
+        """Read battery state and control setpoints from the storage model."""
+        return await self._read(
+            lambda: self._storage.read if self._storage else None, "Storage"
+        )
+
+    async def read_power_limit(self) -> PowerLimit:
+        """Read the output power limit state from the Immediate Controls model."""
+        return await self._read(
+            lambda: self._controls.read if self._controls else None,
+            "Immediate Controls",
+        )
+
+    async def probe_write_access(self) -> bool:
+        """Check whether the device accepts Modbus writes.
+
+        Writes a harmless register's current value back to itself. There is
+        no register exposing the "inverter control via Modbus" web interface
+        setting.
+        """
+        return await self._read(
+            lambda: self._controls.probe_write_access if self._controls else None,
+            "Immediate Controls",
+        )
+
+    async def set_power_limit(self, percent: float, *, revert_seconds: int = 0) -> None:
+        """Limit output power to ``percent`` of the nominal power WMax.
+
+        ``revert_seconds`` > 0 auto-reverts the limit if it isn't refreshed -
+        recommended as a safety net; 0 keeps it active until cleared.
+        """
+        await self._read(
+            lambda: self._controls_op(
+                lambda controls: controls.set_power_limit(percent, revert_seconds)
+            ),
+            "Immediate Controls",
+        )
+
+    async def clear_power_limit(self) -> None:
+        """Disable the output power limit."""
+        await self._read(
+            lambda: self._controls_op(lambda controls: controls.clear_power_limit()),
+            "Immediate Controls",
+        )
+
+    async def set_storage_limits(
+        self,
+        *,
+        charge: float | None = None,
+        discharge: float | None = None,
+        revert_seconds: int = 0,
+    ) -> None:
+        """Limit storage charge / discharge rates in percent of WChaMax.
+
+        ``None`` deactivates the respective limit; negative values force
+        charging / discharging. ``revert_seconds`` > 0 auto-reverts the limits
+        if they aren't refreshed; support varies by device generation.
+        """
+        await self._read(
+            lambda: self._storage_op(
+                lambda storage: storage.set_limits(charge, discharge, revert_seconds)
+            ),
+            "Storage",
+        )
+
+    async def set_minimum_reserve(self, percent: float) -> None:
+        """Set the minimum state of charge reserve in percent."""
+        await self._read(
+            lambda: self._storage_op(
+                lambda storage: storage.set_minimum_reserve(percent)
+            ),
+            "Storage",
+        )
+
+    async def set_grid_charging(self, enabled: bool) -> None:
+        """Allow or prevent charging the storage from the grid."""
+        await self._read(
+            lambda: self._storage_op(
+                lambda storage: storage.set_grid_charging(enabled)
+            ),
+            "Storage",
+        )
+
+    def _controls_op(
+        self, operation: Callable[[ImmediateControls], Awaitable[None]]
+    ) -> Callable[[], Awaitable[None]] | None:
+        """Bind an operation to the current controls, refreshed on re-discovery."""
+        if (controls := self._controls) is None:
+            return None
+        return lambda: operation(controls)
+
+    def _storage_op(
+        self, operation: Callable[[StorageControls], Awaitable[None]]
+    ) -> Callable[[], Awaitable[None]] | None:
+        """Bind an operation to the current storage, refreshed on re-discovery."""
+        if (storage := self._storage) is None:
+            return None
+        return lambda: operation(storage)
 
     async def _read[DataT](
         self,

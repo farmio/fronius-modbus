@@ -37,10 +37,52 @@ MODEL_NAMES = {
 }
 
 
-async def read_unit(
-    host: str, port: int, unit_id: int, has_storage: bool | None
+async def run_write_commands(
+    inverter: FroniusModbusInverter, args: argparse.Namespace
 ) -> None:
+    """Execute requested write commands and report the results."""
+    try:
+        if args.probe_write:
+            allowed = await inverter.probe_write_access()
+            print(f"\nWrite access probe: {'accepted' if allowed else 'REJECTED'}")
+
+        if args.set_power_limit is not None:
+            await inverter.set_power_limit(
+                args.set_power_limit, revert_seconds=args.revert
+            )
+            limit = await inverter.read_power_limit()
+            print(f"\nPower limit set: {limit}")
+        elif args.clear_power_limit:
+            await inverter.clear_power_limit()
+            limit = await inverter.read_power_limit()
+            print(f"\nPower limit cleared: {limit}")
+
+        if args.set_charge_limit is not None or args.set_discharge_limit is not None:
+            await inverter.set_storage_limits(
+                charge=args.set_charge_limit,
+                discharge=args.set_discharge_limit,
+                revert_seconds=args.revert,
+            )
+            print(f"\nStorage limits set: {await inverter.read_storage()}")
+        elif args.clear_storage_limits:
+            await inverter.set_storage_limits()
+            print(f"\nStorage limits cleared: {await inverter.read_storage()}")
+
+        if args.set_reserve is not None:
+            await inverter.set_minimum_reserve(args.set_reserve)
+            print(f"\nMinimum reserve set: {await inverter.read_storage()}")
+
+        if args.set_grid_charging is not None:
+            await inverter.set_grid_charging(args.set_grid_charging == "on")
+            print(f"\nGrid charging set: {await inverter.read_storage()}")
+    except (ModbusError, SunSpecError) as err:
+        print(f"\nWrite failed: {err}")
+        print('Is "inverter control via Modbus" enabled on the web interface?')
+
+
+async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
     """Read and print SunSpec data of one Modbus unit."""
+    port: int = args.port
     print(f"\n=== {host}:{port} unit {unit_id} ===")
     try:
         connection = await connect_tcp(host, port=port)
@@ -51,7 +93,7 @@ async def read_unit(
 
     try:
         inverter = FroniusModbusInverter(
-            connection.for_unit(unit_id), has_storage=has_storage
+            connection.for_unit(unit_id), has_storage=args.storage
         )
         try:
             await inverter.discover()
@@ -134,6 +176,29 @@ async def read_unit(
                 print(f"  state of charge:        {storage.state_of_charge} %")
                 print(f"  state:                  {storage.state}")
                 print(f"  charge reference power: {storage.charge_reference_power} W")
+                print(f"  minimum reserve:        {storage.minimum_reserve} %")
+                print(
+                    f"  charge limit:           {storage.charge_limit} %"
+                    f" (enabled: {storage.charge_limit_enabled})"
+                )
+                print(
+                    f"  discharge limit:        {storage.discharge_limit} %"
+                    f" (enabled: {storage.discharge_limit_enabled})"
+                )
+                print(f"  grid charging:          {storage.grid_charging}")
+
+        if inverter.has_immediate_controls:
+            try:
+                limit = await inverter.read_power_limit()
+            except (ModbusError, SunSpecError) as err:
+                print(f"Reading power limit failed: {err}")
+            else:
+                print("\nPower limit:")
+                print(f"  percent:        {limit.percent} %")
+                print(f"  enabled:        {limit.enabled}")
+                print(f"  revert seconds: {limit.revert_seconds}")
+
+        await run_write_commands(inverter, args)
 
         if not inverter.has_mppt:
             print("No Multiple MPPT model (160) found.")
@@ -183,6 +248,61 @@ async def main() -> int:
     parser.add_argument(
         "--debug", action="store_true", help="enable verbose protocol logging"
     )
+    write_group = parser.add_argument_group(
+        "write commands",
+        'require "inverter control via Modbus" enabled on the web interface',
+    )
+    write_group.add_argument(
+        "--probe-write",
+        action="store_true",
+        help="check whether the device accepts Modbus writes (harmless self-write)",
+    )
+    write_group.add_argument(
+        "--set-power-limit",
+        type=float,
+        metavar="PCT",
+        help="limit output power to PCT %% of nominal power",
+    )
+    write_group.add_argument(
+        "--clear-power-limit", action="store_true", help="disable the power limit"
+    )
+    write_group.add_argument(
+        "--set-charge-limit",
+        type=float,
+        metavar="PCT",
+        help="limit battery charge rate to PCT %% of WChaMax"
+        " (negative: force discharge)",
+    )
+    write_group.add_argument(
+        "--set-discharge-limit",
+        type=float,
+        metavar="PCT",
+        help="limit battery discharge rate to PCT %% of WChaMax"
+        " (negative: force charge)",
+    )
+    write_group.add_argument(
+        "--clear-storage-limits",
+        action="store_true",
+        help="deactivate battery charge/discharge limits",
+    )
+    write_group.add_argument(
+        "--set-reserve",
+        type=float,
+        metavar="PCT",
+        help="set the minimum state of charge reserve",
+    )
+    write_group.add_argument(
+        "--set-grid-charging",
+        choices=["on", "off"],
+        help="allow or prevent charging the battery from the grid",
+    )
+    write_group.add_argument(
+        "--revert",
+        type=int,
+        default=60,
+        metavar="SECONDS",
+        help="auto-revert timeout for limit writes (default: 60, 0 = permanent)",
+    )
     args = parser.parse_args()
 
     if args.debug:
@@ -191,7 +311,7 @@ async def main() -> int:
         logging.getLogger("tmodbus").setLevel(logging.CRITICAL)
 
     for unit_id in args.unit or [1]:
-        await read_unit(args.host, args.port, unit_id, args.storage)
+        await read_unit(args.host, unit_id, args)
     return 0
 
 

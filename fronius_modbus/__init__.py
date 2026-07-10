@@ -5,6 +5,7 @@ the caller.
 """
 
 from .common import DeviceIdentity
+from .controls import PowerLimit
 from .inverter import GEN24_UNIT_ID, FroniusModbusInverter, datamanager_unit_id
 from .inverter_model import InverterData, OperatingState
 from .mppt import ModuleRole, MpptData, MpptModule
@@ -20,6 +21,7 @@ __all__ = [
     "MpptData",
     "MpptModule",
     "OperatingState",
+    "PowerLimit",
     "StorageData",
     "StorageState",
     "SunSpecError",
