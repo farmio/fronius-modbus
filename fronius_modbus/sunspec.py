@@ -18,6 +18,7 @@ END_MODEL_ID: Final = 0xFFFF
 # Sanity limit against malformed maps sending the chain walk astray.
 MAX_MODELS: Final = 50
 
+COMMON_MODEL_ID: Final = 1
 INVERTER_MODELS_FLOAT: Final = frozenset({111, 112, 113})
 INVERTER_MODELS_INT_SF: Final = frozenset({101, 102, 103})
 MULTI_MPPT_MODEL_ID: Final = 160
@@ -39,6 +40,25 @@ class SunSpecModel:
     model_id: int
     address: int
     length: int
+
+
+def check_model_header(
+    expected: SunSpecModel,
+    model_id: float | None,
+    length: float | None,
+    name: str,
+) -> None:
+    """Verify a read-back model header against the discovered model.
+
+    The register map shifts when the data type setting is changed on the
+    device, so readers verify the header on every update.
+    """
+    if model_id != expected.model_id or length != expected.length:
+        raise SunSpecError(
+            f"{name} model header mismatch:"
+            f" expected {expected.model_id}/{expected.length},"
+            f" read {model_id}/{length} - the register map has changed"
+        )
 
 
 async def discover_models(unit: ModbusUnit) -> list[SunSpecModel]:

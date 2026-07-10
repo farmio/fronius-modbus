@@ -70,6 +70,71 @@ async def read_unit(
                 f"  length {model.length:>3}  {name}"
             )
 
+        if inverter.has_common_model:
+            try:
+                identity = await inverter.read_device_identity()
+            except (ModbusError, SunSpecError) as err:
+                print(f"Reading device identity failed: {err}")
+            else:
+                print("\nDevice identity:")
+                print(f"  manufacturer:  {identity.manufacturer}")
+                print(f"  model:         {identity.model}")
+                print(f"  options:       {identity.options}")
+                print(f"  version:       {identity.software_version}")
+                print(f"  serial number: {identity.serial_number}")
+
+        if inverter.has_inverter_model:
+            try:
+                ac_dc = await inverter.read_inverter()
+            except (ModbusError, SunSpecError) as err:
+                print(f"Reading inverter data failed: {err}")
+            else:
+                print("\nInverter:")
+                print(f"  AC power:        {ac_dc.ac_power} W")
+                print(f"  frequency:       {ac_dc.frequency} Hz")
+                print(f"  energy total:    {ac_dc.energy_total} Wh")
+                print(f"  AC current:      {ac_dc.ac_current} A")
+                print(
+                    "  phase currents:  "
+                    f"{ac_dc.ac_current_phase_1} / {ac_dc.ac_current_phase_2}"
+                    f" / {ac_dc.ac_current_phase_3} A"
+                )
+                print(
+                    "  phase voltages:  "
+                    f"{ac_dc.voltage_phase_1} / {ac_dc.voltage_phase_2}"
+                    f" / {ac_dc.voltage_phase_3} V"
+                )
+                print(
+                    "  phase-phase:     "
+                    f"{ac_dc.voltage_phase_1_2} / {ac_dc.voltage_phase_2_3}"
+                    f" / {ac_dc.voltage_phase_3_1} V"
+                )
+                print(f"  apparent power:  {ac_dc.apparent_power} VA")
+                print(f"  reactive power:  {ac_dc.reactive_power} var")
+                print(f"  power factor:    {ac_dc.power_factor} %")
+                print(
+                    f"  DC totals:       {ac_dc.dc_current} A / {ac_dc.dc_voltage} V"
+                    f" / {ac_dc.dc_power} W"
+                )
+                print(f"  operating state: {ac_dc.operating_state}")
+                print(f"  vendor state:    {ac_dc.vendor_operating_state}")
+                print(
+                    f"  events:          {ac_dc.events:#010x}"
+                    if ac_dc.events is not None
+                    else "  events:          None"
+                )
+
+        if inverter.has_storage_model:
+            try:
+                storage = await inverter.read_storage()
+            except (ModbusError, SunSpecError) as err:
+                print(f"Reading storage data failed: {err}")
+            else:
+                print("\nStorage:")
+                print(f"  state of charge:        {storage.state_of_charge} %")
+                print(f"  state:                  {storage.state}")
+                print(f"  charge reference power: {storage.charge_reference_power} W")
+
         if not inverter.has_mppt:
             print("No Multiple MPPT model (160) found.")
             return

@@ -17,10 +17,18 @@ needed — and the data type setting is detected automatically.
 
 Currently implemented (read-only):
 
+- SunSpec **Common Model (1)**: manufacturer, model, software version and
+  serial number.
+- SunSpec **inverter models (101-103 / 111-113)** in both encodings:
+  AC power, frequency, lifetime energy, per-phase currents and voltages,
+  apparent/reactive power, power factor, DC totals, operating state and
+  vendor state, event flags.
 - SunSpec **Multiple MPPT Inverter Extension Model (160)**: DC current, voltage,
   power and lifetime energy per MPP tracker, with module role classification
   (PV string / storage charge / storage discharge) and derived totals
   (PV-only energy, battery charging/discharging energy).
+- SunSpec **Basic Storage Control Model (124)**, read-only values: state of
+  charge, battery status, nominal charge/discharge power reference.
 
 ## Usage
 
@@ -41,6 +49,12 @@ async def main() -> None:
     print("Data type:", "float" if inverter.float_mode else "int+SF")
     print("Storage:", inverter.has_storage)  # auto-detected during discovery
 
+    identity = await inverter.read_device_identity()
+    print(identity.manufacturer, identity.model, identity.serial_number)
+
+    ac_dc = await inverter.read_inverter()
+    print("AC power:", ac_dc.ac_power, "state:", ac_dc.operating_state)
+
     if inverter.has_mppt:
         data = await inverter.read_mppt()
         for module in data.modules:
@@ -48,6 +62,10 @@ async def main() -> None:
         print("PV energy total:", data.pv_energy_total)
         print("Battery charged:", data.storage_charge_energy_total)
         print("Battery discharged:", data.storage_discharge_energy_total)
+
+    if inverter.has_storage_model:
+        storage = await inverter.read_storage()
+        print("SoC:", storage.state_of_charge, "state:", storage.state)
 
     await connection.close()
 

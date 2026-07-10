@@ -17,7 +17,7 @@ from modbus_connection.model import Component, repeating_group
 from modbus_connection.model import sunspec as sunspec_fields
 from modbus_connection.model.fields import NumberField
 
-from .sunspec import SunSpecError, SunSpecModel
+from .sunspec import SunSpecModel, check_model_header
 
 # Data block offsets, relative to the first register after the 2-register
 # model header. Verified against the Fronius register tables
@@ -197,14 +197,9 @@ def build_mppt_reader(
         model first.
         """
         await component.async_update()
-        if component.model_id != model.model_id or (
-            component.model_length != model.length
-        ):
-            raise SunSpecError(
-                f"Model header mismatch: expected {model.model_id}/{model.length},"
-                f" read {component.model_id}/{component.model_length}"
-                " - the register map has changed"
-            )
+        check_model_header(
+            model, component.model_id, component.model_length, "Multiple MPPT"
+        )
 
         id_strs = [module.input_id_str or "" for module in component.modules]
         roles = classify_modules(id_strs, has_storage)
