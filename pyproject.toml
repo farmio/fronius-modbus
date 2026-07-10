@@ -28,6 +28,8 @@ Changelog = "https://github.com/farmio/fronius-modbus/releases"
 
 [dependency-groups]
 dev = [
+  # tmodbus backend for scripts/read_inverter.py
+  "modbus-connection[tmodbus]>=3.4.1",
   "mypy>=1.14",
   "pytest>=8",
   "pytest-asyncio>=0.25",
