@@ -31,6 +31,51 @@ async def test_data_type_detection(
     assert data.modules[0].power == 3300
 
 
+@pytest.mark.parametrize(
+    ("storage_wcha_max", "expected_has_storage"),
+    [
+        pytest.param(None, False, id="no_storage_model"),
+        pytest.param(0, False, id="storage_capable_without_battery"),
+        pytest.param(0xFFFF, False, id="wcha_max_not_implemented"),
+        pytest.param(5000, True, id="storage_connected"),
+    ],
+)
+async def test_storage_auto_detection(
+    mock_modbus_unit: MockModbusUnit,
+    storage_wcha_max: int | None,
+    expected_has_storage: bool,
+) -> None:
+    """Test storage detection from the Basic Storage Control Model (124)."""
+    hybrid_modules = [
+        MpptModuleSpec(id_str="String 1", energy=1_000_000),
+        MpptModuleSpec(id_str="String 2", energy=500_000),
+        MpptModuleSpec(id_str="unnamed 3", energy=200_000),
+        MpptModuleSpec(id_str="unnamed 4", energy=150_000),
+    ]
+    mock_modbus_unit.holding.update(
+        build_sunspec_map(hybrid_modules, storage_wcha_max=storage_wcha_max)
+    )
+    inverter = FroniusModbusInverter(mock_modbus_unit)
+    await inverter.discover()
+    assert inverter.has_storage is expected_has_storage
+
+    data = await inverter.read_mppt()
+    if expected_has_storage:
+        assert data.storage_charge_energy_total == 200_000
+        assert data.storage_discharge_energy_total == 150_000
+    else:
+        assert data.storage_charge_energy_total is None
+        assert data.pv_energy_total == 1_850_000
+
+
+async def test_storage_detection_override(mock_modbus_unit: MockModbusUnit) -> None:
+    """Test an explicit has_storage overrides the auto-detection."""
+    mock_modbus_unit.holding.update(build_sunspec_map(MODULES))
+    inverter = FroniusModbusInverter(mock_modbus_unit, has_storage=True)
+    await inverter.discover()
+    assert inverter.has_storage is True
+
+
 async def test_no_mppt_model(mock_modbus_unit: MockModbusUnit) -> None:
     """Test a device without model 160 in its chain."""
     mock_modbus_unit.holding.update(build_sunspec_map([], include_mppt_model=False))

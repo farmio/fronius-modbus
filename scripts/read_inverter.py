@@ -37,7 +37,9 @@ MODEL_NAMES = {
 }
 
 
-async def read_unit(host: str, port: int, unit_id: int, has_storage: bool) -> None:
+async def read_unit(
+    host: str, port: int, unit_id: int, has_storage: bool | None
+) -> None:
     """Read and print SunSpec data of one Modbus unit."""
     print(f"\n=== {host}:{port} unit {unit_id} ===")
     try:
@@ -59,6 +61,7 @@ async def read_unit(host: str, port: int, unit_id: int, has_storage: bool) -> No
 
         data_type = {True: "float", False: "int+SF", None: "unknown"}
         print(f"Data type setting: {data_type[inverter.float_mode]}")
+        print(f"Storage detected: {inverter.has_storage}")
         print("Discovered SunSpec models:")
         for model in inverter.model_chain:
             name = MODEL_NAMES.get(model.model_id, "?")
@@ -77,7 +80,7 @@ async def read_unit(host: str, port: int, unit_id: int, has_storage: bool) -> No
             print(f"Reading MPPT data failed: {err}")
             return
 
-        print(f"\nMPPT modules (classified with has_storage={has_storage}):")
+        print(f"\nMPPT modules (classified with has_storage={inverter.has_storage}):")
         for module in data.modules:
             print(f"  module {module.index}: IDStr={module.id_str!r}")
             print(f"    role:    {module.role}")
@@ -108,8 +111,9 @@ async def main() -> int:
     )
     parser.add_argument(
         "--storage",
-        action="store_true",
-        help="hint that the system has a battery (affects module classification)",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="override the storage auto-detection (--storage / --no-storage)",
     )
     parser.add_argument(
         "--debug", action="store_true", help="enable verbose protocol logging"

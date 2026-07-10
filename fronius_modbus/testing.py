@@ -39,11 +39,16 @@ def build_sunspec_map(
     voltage_sf: int = -1,
     power_sf: int = 0,
     energy_sf: int = 0,
+    storage_wcha_max: int | None = None,
 ) -> dict[int, int]:
     """Build a holding register map of a chain of SunSpec models.
 
     Scale factors of -1 mean raw current / voltage values are in
     deciampere / decivolt.
+
+    ``storage_wcha_max`` adds a Basic Storage Control Model (124) reporting
+    the given WChaMax value - storage-capable inverters expose it with 0
+    when no storage is connected; plain inverters don't expose it at all.
     """
     registers: dict[int, int] = {
         SUNSPEC_BASE_ADDRESS: 0x5375,  # "Su"
@@ -97,6 +102,10 @@ def build_sunspec_map(
                 0,
             ]
         add_model(160, data)
+
+    if storage_wcha_max is not None:
+        # WChaMax at data offset 0; remaining 23 registers read 0
+        add_model(124, [storage_wcha_max], length=24)
 
     # end model marker
     registers[address] = 0xFFFF

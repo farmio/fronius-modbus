@@ -21,6 +21,7 @@ MAX_MODELS: Final = 50
 INVERTER_MODELS_FLOAT: Final = frozenset({111, 112, 113})
 INVERTER_MODELS_INT_SF: Final = frozenset({101, 102, 103})
 MULTI_MPPT_MODEL_ID: Final = 160
+STORAGE_MODEL_ID: Final = 124
 
 
 class SunSpecError(Exception):
