@@ -4,6 +4,14 @@ Async Python library for the Modbus TCP ([SunSpec](https://sunspec.org)) interfa
 of Fronius inverters, built on
 [modbus-connection](https://github.com/home-assistant-libs/modbus-connection).
 
+> [!WARNING]
+> **Alpha version — mostly untested.** So far this has been verified against a
+> single Symo GEN24 10.0 Plus (firmware 1.40.9-1) and a SnapINverter Symo behind
+> a Datamanager 2.0. Write support (power limiting, battery controls) is only
+> tested against mocks. Expect breaking API changes. Use at your own risk —
+> especially the write operations, which change inverter behavior. Feedback and
+> test reports are very welcome!
+
 Supports both Fronius device generations:
 
 - **GEN24 / Tauro** — the inverter itself serves Modbus TCP (unit ID 1)
