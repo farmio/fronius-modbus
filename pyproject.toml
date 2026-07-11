@@ -36,6 +36,7 @@ dev = [
   "ruff>=0.9",
   # scripts/monitor.py, the interactive TUI
   "textual>=8",
+  "textual-plotext>=1",
 ]
 
 [tool.hatch.build.targets.sdist]

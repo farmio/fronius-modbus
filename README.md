@@ -100,7 +100,10 @@ uv run scripts/read_inverter.py <inverter-ip> --probe-write
 ```
 
 `monitor.py` — an interactive terminal UI that polls live at a configurable
-interval and lets you run every write command with immediate status feedback:
+interval. It shows the data panels and a status log, a live power graph with a
+selectable series list (AC power, per-MPPT and battery charge/discharge), and a
+write-command dialog (press `s`) for running every write command with immediate
+status feedback:
 
 ```bash
 uv run scripts/monitor.py <inverter-ip> --interval 2
