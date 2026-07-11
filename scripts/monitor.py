@@ -31,11 +31,13 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
+    ContentSwitcher,
     Footer,
     Header,
     Input,
     Label,
     RichLog,
+    Select,
     SelectionList,
     Static,
 )
@@ -66,49 +68,89 @@ def _bool(value: bool | None) -> str:
 
 
 class ControlsScreen(ModalScreen[None]):
-    """A modal dialog with the inverter write commands."""
+    """A modal dialog to set one inverter value at a time.
+
+    A menu selects which value to control; the matching input(s) and action
+    buttons are then shown, keeping the dialog uncluttered.
+    """
 
     BINDINGS: ClassVar[list[BindingType]] = [("escape", "close", "Close")]
+
+    _MENU: ClassVar[list[tuple[str, str]]] = [
+        ("Output power limit", "power"),
+        ("Battery charge / discharge limit", "storage"),
+        ("Minimum reserve", "reserve"),
+        ("Grid charging", "grid"),
+        ("Poll interval", "interval"),
+        ("Probe write access", "probe"),
+    ]
 
     CSS = """
     ControlsScreen { align: center middle; }
     #dialog {
-        width: 64; height: auto; padding: 1 2;
+        width: 68; height: auto; padding: 1 2;
         border: thick $primary; background: $surface;
     }
-    #dialog Input { margin-bottom: 1; }
-    #dialog Button { width: 1fr; }
-    #dialog Label { color: $text-muted; margin-top: 1; }
+    #dialog > Label { color: $text-muted; margin-top: 1; }
+    #switcher { height: auto; margin-top: 1; }
+    #switcher Input { margin-bottom: 1; }
+    .actions { height: auto; }
+    .actions Button { width: 1fr; margin-right: 1; }
     #dialog_status { margin-top: 1; }
+    #close { width: 1fr; margin-top: 1; }
     """
 
     def compose(self) -> ComposeResult:
         """Build the dialog."""
         with Vertical(id="dialog"):
-            yield Label("Write commands (require Modbus control enabled)")
-            yield Label("Poll interval (seconds)")
-            yield Input(id="interval_input", type="number")
-            yield Label("Revert timeout (seconds, 0 = permanent)")
-            yield Input("60", id="revert_input", type="integer")
-            yield Label("Output power limit (0-100 %)")
-            yield Input(placeholder="percent", id="power_input", type="number")
-            with Horizontal():
-                yield Button("Set power", id="set_power", variant="primary")
-                yield Button("Clear", id="clear_power")
-            yield Label("Battery charge / discharge limit (-100..100 %)")
-            yield Input(placeholder="charge %", id="charge_input", type="number")
-            yield Input(placeholder="discharge %", id="discharge_input", type="number")
-            with Horizontal():
-                yield Button("Set storage", id="set_storage", variant="primary")
-                yield Button("Clear", id="clear_storage")
-            yield Label("Minimum reserve (0-100 %)")
-            yield Input(placeholder="percent", id="reserve_input", type="number")
-            yield Button("Set minimum reserve", id="set_reserve", variant="primary")
-            yield Label("Grid charging")
-            with Horizontal():
-                yield Button("On", id="grid_on")
-                yield Button("Off", id="grid_off")
-            yield Button("Probe write access", id="probe", variant="warning")
+            yield Label("Set value (requires Modbus control enabled)")
+            yield Select(
+                self._MENU, id="menu", value="power", allow_blank=False, compact=True
+            )
+            with ContentSwitcher(initial="panel_power", id="switcher"):
+                with Vertical(id="panel_power"):
+                    yield Label("Output power limit (0-100 %)")
+                    yield Input(placeholder="percent", id="power_input", type="number")
+                    yield Label("Revert timeout (seconds, 0 = permanent)")
+                    yield Input("60", id="power_revert", type="integer")
+                    with Horizontal(classes="actions"):
+                        yield Button("Set", id="set_power", variant="primary")
+                        yield Button("Reset", id="clear_power")
+                with Vertical(id="panel_storage"):
+                    yield Label("Charge limit (-100..100 %, empty = off)")
+                    yield Input(
+                        placeholder="charge %", id="charge_input", type="number"
+                    )
+                    yield Label("Discharge limit (-100..100 %, empty = off)")
+                    yield Input(
+                        placeholder="discharge %", id="discharge_input", type="number"
+                    )
+                    yield Label("Revert timeout (seconds, 0 = permanent)")
+                    yield Input("60", id="storage_revert", type="integer")
+                    with Horizontal(classes="actions"):
+                        yield Button("Set", id="set_storage", variant="primary")
+                        yield Button("Reset", id="clear_storage")
+                with Vertical(id="panel_reserve"):
+                    yield Label("Minimum reserve (0-100 %)")
+                    yield Input(
+                        placeholder="percent", id="reserve_input", type="number"
+                    )
+                    with Horizontal(classes="actions"):
+                        yield Button("Set", id="set_reserve", variant="primary")
+                with Vertical(id="panel_grid"):
+                    yield Label("Charge the battery from the grid")
+                    with Horizontal(classes="actions"):
+                        yield Button("Enable", id="grid_on", variant="primary")
+                        yield Button("Disable", id="grid_off")
+                with Vertical(id="panel_interval"):
+                    yield Label("Poll interval (seconds)")
+                    yield Input(id="interval_input", type="number")
+                    with Horizontal(classes="actions"):
+                        yield Button("Apply", id="apply_interval", variant="primary")
+                with Vertical(id="panel_probe"):
+                    yield Label("Check whether the device accepts Modbus writes")
+                    with Horizontal(classes="actions"):
+                        yield Button("Run probe", id="probe", variant="warning")
             yield Static(id="dialog_status")
             yield Button("Close", id="close")
 
@@ -127,33 +169,34 @@ class ControlsScreen(ModalScreen[None]):
         value = self.query_one(f"#{widget_id}", Input).value.strip()
         return float(value) if value else None
 
+    def _revert(self, widget_id: str) -> int:
+        value = self.query_one(f"#{widget_id}", Input).value.strip()
+        return int(value) if value else 0
+
     def action_close(self) -> None:
         """Close the dialog."""
         self.dismiss()
 
-    @on(Input.Submitted, "#interval_input")
-    def _on_interval(self, event: Input.Submitted) -> None:
-        try:
-            interval = float(event.value)
-        except ValueError:
-            return
-        if interval > 0:
-            self._monitor.set_poll_interval(interval)
-            self._status(f"Poll interval set to {interval:g} s")
+    @on(Select.Changed, "#menu")
+    def _on_menu(self, event: Select.Changed) -> None:
+        self.query_one("#switcher", ContentSwitcher).current = f"panel_{event.value}"
 
     @on(Button.Pressed)
     async def _on_button(self, event: Button.Pressed) -> None:
         monitor = self._monitor
         inverter = monitor.current_inverter
-        if event.button.id == "close":
-            self.dismiss()
-            return
-        if inverter is None:
-            self._status("[red]Not connected[/red]")
-            return
-        revert_value = self.query_one("#revert_input", Input).value.strip()
-        revert = int(revert_value) if revert_value else 0
         match event.button.id:
+            case "close":
+                self.dismiss()
+            case "apply_interval":
+                interval = self._input("interval_input")
+                if interval is None or interval <= 0:
+                    self._status("[red]Enter a positive interval[/red]")
+                    return
+                monitor.set_poll_interval(interval)
+                self._status(f"Poll interval set to {interval:g} s")
+            case _ if inverter is None:
+                self._status("[red]Not connected[/red]")
             case "set_power":
                 percent = self._input("power_input")
                 if percent is None:
@@ -162,7 +205,9 @@ class ControlsScreen(ModalScreen[None]):
                 self._status(
                     await monitor.run_write(
                         f"Set power limit {percent} %",
-                        inverter.set_power_limit(percent, revert_seconds=revert),
+                        inverter.set_power_limit(
+                            percent, revert_seconds=self._revert("power_revert")
+                        ),
                     )
                 )
             case "clear_power":
@@ -178,7 +223,7 @@ class ControlsScreen(ModalScreen[None]):
                         inverter.set_storage_limits(
                             charge=self._input("charge_input"),
                             discharge=self._input("discharge_input"),
-                            revert_seconds=revert,
+                            revert_seconds=self._revert("storage_revert"),
                         ),
                     )
                 )
