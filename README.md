@@ -85,6 +85,31 @@ Modbus must be enabled on the inverter web interface
 (GEN24: *Communication → Modbus → Slave as Modbus TCP*;
 Datamanager: *Settings → Modbus → Data output via Modbus → TCP*).
 
+## Testing on real hardware
+
+Two scripts in `scripts/` help test the library against an inverter (clone the
+repo and run them with [uv](https://docs.astral.sh/uv/)):
+
+`read_inverter.py` — a one-shot dump of everything the library reads, plus
+optional write commands. Good for quick checks and scripting:
+
+```bash
+uv run scripts/read_inverter.py <inverter-ip>
+uv run scripts/read_inverter.py <inverter-ip> --set-power-limit 80 --revert 60
+uv run scripts/read_inverter.py <inverter-ip> --probe-write
+```
+
+`monitor.py` — an interactive terminal UI that polls live at a configurable
+interval and lets you run every write command with immediate status feedback:
+
+```bash
+uv run scripts/monitor.py <inverter-ip> --interval 2
+```
+
+> Write commands require "inverter control via Modbus" to be enabled on the
+> device web interface. Limit writes default to a 60 second auto-revert as a
+> safety net.
+
 ## Testing support
 
 `fronius_modbus.testing` provides `build_sunspec_map()` to build SunSpec register

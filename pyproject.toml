@@ -28,12 +28,14 @@ Changelog = "https://github.com/farmio/fronius-modbus/releases"
 
 [dependency-groups]
 dev = [
-  # tmodbus backend for scripts/read_inverter.py
+  # tmodbus backend for the scripts in scripts/
   "modbus-connection[tmodbus]>=3.4.1",
   "mypy>=1.14",
   "pytest>=8",
   "pytest-asyncio>=0.25",
   "ruff>=0.9",
+  # scripts/monitor.py, the interactive TUI
+  "textual>=8",
 ]
 
 [tool.hatch.build.targets.sdist]
