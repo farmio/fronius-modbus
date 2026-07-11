@@ -465,6 +465,7 @@ class MonitorApp(App[None]):
                         [t for t, _ in points],
                         [v for _, v in points],
                         label=label,
+                        marker="braille",
                     )
             plt.xlabel("seconds")
         graph.refresh()
