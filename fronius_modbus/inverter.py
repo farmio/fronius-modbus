@@ -1,7 +1,8 @@
 """High-level access to a Fronius inverter unit via Modbus TCP."""
 
+import functools
 from collections.abc import Awaitable, Callable
-from typing import Final
+from typing import Concatenate, Final
 
 from modbus_connection import ModbusUnit
 
@@ -17,7 +18,6 @@ from .sunspec import (
     INVERTER_MODELS_INT_SF,
     MULTI_MPPT_MODEL_ID,
     STORAGE_MODEL_ID,
-    SunSpecComponent,
     SunSpecError,
     SunSpecModel,
     discover_models,
@@ -39,9 +39,27 @@ def datamanager_unit_id(inverter_number: str) -> int | None:
     return number or 100
 
 
-async def _updated[C: SunSpecComponent](component: C) -> C:
-    await component.async_update()
-    return component
+def _rediscovers_on_shift[**P, T](
+    method: Callable[Concatenate["FroniusModbusInverter", P], Awaitable[T]],
+) -> Callable[Concatenate["FroniusModbusInverter", P], Awaitable[T]]:
+    """Retry a method once after re-discovery when it hits a map shift.
+
+    The register map shifts when the data type setting is changed on the
+    device; a component's header check then raises, so re-discover
+    (rebuilding the components) and retry once.
+    """
+
+    @functools.wraps(method)
+    async def wrapper(
+        self: FroniusModbusInverter, /, *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        try:
+            return await method(self, *args, **kwargs)
+        except SunSpecError:
+            await self.discover()
+            return await method(self, *args, **kwargs)
+
+    return wrapper
 
 
 class FroniusModbusInverter:
@@ -132,65 +150,72 @@ class FroniusModbusInverter:
         """Return the discovered SunSpec models."""
         return self._models
 
+    @_rediscovers_on_shift
     async def read_common(self) -> CommonModel:
         """Read manufacturer, model, version and serial from the Common model."""
-        return await self._use(lambda: self.common, "Common", _updated)
+        if (common := self.common) is None:
+            raise SunSpecError("Common model not available")
+        await common.async_update()
+        return common
 
+    @_rediscovers_on_shift
     async def read_inverter(self) -> InverterModel:
         """Read AC/DC values, energy and state from the inverter model."""
-        # spelled out instead of using _use: mypy cannot infer a union type
-        # parameter for the float/int variant classes
-        if (component := self.inverter) is None:
+        if (inverter := self.inverter) is None:
             raise SunSpecError("Inverter model not available")
-        try:
-            await component.async_update()
-        except SunSpecError:
-            await self.discover()
-            if (component := self.inverter) is None:
-                raise
-            await component.async_update()
-        return component
+        await inverter.async_update()
+        return inverter
 
+    @_rediscovers_on_shift
     async def read_mppt(self) -> MpptModel:
         """Read per-module DC values from the Multiple MPPT model."""
-        return await self._use(lambda: self.mppt, "Multiple MPPT", _updated)
+        if (mppt := self.mppt) is None:
+            raise SunSpecError("Multiple MPPT model not available")
+        await mppt.async_update()
+        return mppt
 
+    @_rediscovers_on_shift
     async def read_storage(self) -> StorageModel:
         """Read battery state and control setpoints from the storage model."""
-        return await self._use(lambda: self.storage, "Storage", _updated)
+        if (storage := self.storage) is None:
+            raise SunSpecError("Storage model not available")
+        await storage.async_update()
+        return storage
 
+    @_rediscovers_on_shift
     async def read_controls(self) -> ControlsModel:
         """Read the output power limit state from the Immediate Controls model."""
-        return await self._use(lambda: self.controls, "Immediate Controls", _updated)
+        if (controls := self.controls) is None:
+            raise SunSpecError("Immediate Controls model not available")
+        await controls.async_update()
+        return controls
 
+    @_rediscovers_on_shift
     async def probe_write_access(self) -> bool:
         """Check whether the device accepts Modbus writes."""
-        return await self._use(
-            lambda: self.controls,
-            "Immediate Controls",
-            lambda controls: controls.probe_write_access(),
-        )
+        if (controls := self.controls) is None:
+            raise SunSpecError("Immediate Controls model not available")
+        return await controls.probe_write_access()
 
+    @_rediscovers_on_shift
     async def set_power_limit(self, percent: float, *, revert_seconds: int = 0) -> None:
         """Limit output power to ``percent`` of the nominal power WMax.
 
         ``revert_seconds`` > 0 auto-reverts the limit if it isn't refreshed -
         recommended as a safety net; 0 keeps it active until cleared.
         """
-        await self._use(
-            lambda: self.controls,
-            "Immediate Controls",
-            lambda controls: controls.set_power_limit(percent, revert_seconds),
-        )
+        if (controls := self.controls) is None:
+            raise SunSpecError("Immediate Controls model not available")
+        await controls.set_power_limit(percent, revert_seconds)
 
+    @_rediscovers_on_shift
     async def clear_power_limit(self) -> None:
         """Disable the output power limit."""
-        await self._use(
-            lambda: self.controls,
-            "Immediate Controls",
-            lambda controls: controls.clear_power_limit(),
-        )
+        if (controls := self.controls) is None:
+            raise SunSpecError("Immediate Controls model not available")
+        await controls.clear_power_limit()
 
+    @_rediscovers_on_shift
     async def set_storage_limits(
         self,
         *,
@@ -204,46 +229,20 @@ class FroniusModbusInverter:
         charging / discharging. ``revert_seconds`` > 0 auto-reverts the limits
         if they aren't refreshed; support varies by device generation.
         """
-        await self._use(
-            lambda: self.storage,
-            "Storage",
-            lambda storage: storage.set_limits(charge, discharge, revert_seconds),
-        )
+        if (storage := self.storage) is None:
+            raise SunSpecError("Storage model not available")
+        await storage.set_limits(charge, discharge, revert_seconds)
 
+    @_rediscovers_on_shift
     async def set_minimum_reserve(self, percent: float) -> None:
         """Set the minimum state of charge reserve in percent."""
-        await self._use(
-            lambda: self.storage,
-            "Storage",
-            lambda storage: storage.set_minimum_reserve(percent),
-        )
+        if (storage := self.storage) is None:
+            raise SunSpecError("Storage model not available")
+        await storage.set_minimum_reserve(percent)
 
+    @_rediscovers_on_shift
     async def set_grid_charging(self, enabled: bool) -> None:
         """Allow or prevent charging the storage from the grid."""
-        await self._use(
-            lambda: self.storage,
-            "Storage",
-            lambda storage: storage.set_grid_charging(enabled),
-        )
-
-    async def _use[C, T](
-        self,
-        get: Callable[[], C | None],
-        name: str,
-        operation: Callable[[C], Awaitable[T]],
-    ) -> T:
-        """Run an operation on a component, re-discovering once on a map shift.
-
-        The register map shifts when the data type setting is changed on the
-        device; the operation's update then raises on the header check, so
-        re-discover (rebuilding the components) and retry once.
-        """
-        if (component := get()) is None:
-            raise SunSpecError(f"{name} model not available")
-        try:
-            return await operation(component)
-        except SunSpecError:
-            await self.discover()
-            if (component := get()) is None:
-                raise
-            return await operation(component)
+        if (storage := self.storage) is None:
+            raise SunSpecError("Storage model not available")
+        await storage.set_grid_charging(enabled)
