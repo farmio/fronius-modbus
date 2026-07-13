@@ -20,8 +20,6 @@ from .sunspec import SunSpecComponent, SunSpecError
 class ControlsModel(SunSpecComponent):
     """The Immediate Controls model: output power limit state and setters."""
 
-    model_name = "Immediate Controls"
-
     # harmless read-write register used to probe write access
     connect_window = sunspec_fields.uint16(2, writable=True)
     power_limit = sunspec_fields.uint16(5, scale_register=23, unit="%")

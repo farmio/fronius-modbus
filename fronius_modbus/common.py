@@ -8,8 +8,6 @@ from .sunspec import SunSpecComponent
 class CommonModel(SunSpecComponent):
     """Manufacturer, model, version and serial number of the device."""
 
-    model_name = "Common"
-
     manufacturer = sunspec_fields.string(2, 16)
     model = sunspec_fields.string(18, 16)
     options = sunspec_fields.string(34, 8)

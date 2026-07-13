@@ -54,8 +54,6 @@ _STORAGE_STATES: Final = {
 class StorageModel(SunSpecComponent):
     """The storage model: battery state and charge/discharge setpoints."""
 
-    model_name = "Storage"
-
     charge_reference_power = sunspec_fields.uint16(2, scale_register=18, unit="W")
     state_of_charge = sunspec_fields.uint16(8, scale_register=22, unit="%")
     state: NumberField[StorageState] = NumberField(

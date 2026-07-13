@@ -83,8 +83,6 @@ def classify_modules(id_strs: list[str], has_storage: bool) -> list[ModuleRole]:
 class MpptModel(SunSpecComponent):
     """The Multiple MPPT model: per-module DC values, roles classified."""
 
-    model_name = "Multiple MPPT"
-
     modules = repeating_group(_module_count, MpptModule, stride=20)
 
     def __init__(

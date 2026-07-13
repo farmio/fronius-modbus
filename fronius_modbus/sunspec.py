@@ -7,7 +7,7 @@ of using fixed addresses.
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, Final
+from typing import Final
 
 from modbus_connection import ModbusUnit
 from modbus_connection.decode import decode_uint32
@@ -45,25 +45,6 @@ class SunSpecModel:
     length: int
 
 
-def check_model_header(
-    expected: SunSpecModel,
-    model_id: float | None,
-    length: float | None,
-    name: str,
-) -> None:
-    """Verify a read-back model header against the discovered model.
-
-    The register map shifts when the data type setting is changed on the
-    device, so readers verify the header on every update.
-    """
-    if model_id != expected.model_id or length != expected.length:
-        raise SunSpecError(
-            f"{name} model header mismatch:"
-            f" expected {expected.model_id}/{expected.length},"
-            f" read {model_id}/{length} - the register map has changed"
-        )
-
-
 class SunSpecComponent(Component):
     """A discovered SunSpec model, placed at its address and header-checked.
 
@@ -73,8 +54,6 @@ class SunSpecComponent(Component):
     shifts when the data type setting is changed on the device, and a
     mismatch raises :class:`SunSpecError` so the owner can re-discover.
     """
-
-    model_name: ClassVar[str] = ""
 
     model_id = sunspec_fields.uint16(0)
     model_length = sunspec_fields.uint16(1)
@@ -87,9 +66,16 @@ class SunSpecComponent(Component):
     async def async_update(self) -> None:
         """Read the model's registers, verifying the header."""
         await super().async_update()
-        check_model_header(
-            self._model, self.model_id, self.model_length, self.model_name
-        )
+        if (
+            self.model_id != self._model.model_id
+            or self.model_length != self._model.length
+        ):
+            raise SunSpecError(
+                f"{type(self).__name__} header mismatch:"
+                f" expected {self._model.model_id}/{self._model.length},"
+                f" read {self.model_id}/{self.model_length}"
+                " - the register map has changed"
+            )
 
     def __repr__(self) -> str:
         """Return the component's field values."""

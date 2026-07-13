@@ -46,8 +46,6 @@ _OPERATING_STATES: Final = {
 class InverterFloatModel(SunSpecComponent):
     """An inverter model in float encoding (111-113)."""
 
-    model_name = "Inverter"
-
     ac_current = sunspec_fields.float32(2, unit="A")
     ac_current_phase_1 = sunspec_fields.float32(4, unit="A")
     ac_current_phase_2 = sunspec_fields.float32(6, unit="A")
@@ -76,8 +74,6 @@ class InverterFloatModel(SunSpecComponent):
 
 class InverterIntegerModel(SunSpecComponent):
     """An inverter model in int+SF encoding (101-103)."""
-
-    model_name = "Inverter"
 
     ac_current = sunspec_fields.uint16(2, scale_register=6, unit="A")
     ac_current_phase_1 = sunspec_fields.uint16(3, scale_register=6, unit="A")
