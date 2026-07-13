@@ -5,11 +5,11 @@ from typing import Final
 
 from modbus_connection import ModbusUnit
 
-from .common import DeviceIdentity, DeviceIdentityReader, build_device_identity_reader
-from .controls import ImmediateControls, PowerLimit, build_immediate_controls
-from .inverter_model import InverterData, InverterDataReader, build_inverter_reader
-from .mppt import MpptData, MpptReader, build_mppt_reader
-from .storage import WCHA_MAX, StorageControls, StorageData, build_storage_controls
+from .common import CommonModel
+from .controls import ControlsModel
+from .inverter_model import InverterFloatModel, InverterIntegerModel, InverterModel
+from .mppt import MpptModel
+from .storage import WCHA_MAX, StorageModel
 from .sunspec import (
     COMMON_MODEL_ID,
     IMMEDIATE_CONTROLS_MODEL_ID,
@@ -17,6 +17,7 @@ from .sunspec import (
     INVERTER_MODELS_INT_SF,
     MULTI_MPPT_MODEL_ID,
     STORAGE_MODEL_ID,
+    SunSpecComponent,
     SunSpecError,
     SunSpecModel,
     discover_models,
@@ -38,8 +39,21 @@ def datamanager_unit_id(inverter_number: str) -> int | None:
     return number or 100
 
 
+async def _updated[C: SunSpecComponent](component: C) -> C:
+    await component.async_update()
+    return component
+
+
 class FroniusModbusInverter:
-    """Read SunSpec data from a Fronius inverter Modbus unit."""
+    """A Fronius inverter Modbus unit: discovery plus its SunSpec models.
+
+    :meth:`discover` walks the model chain and builds a component per
+    discovered model, exposed as attributes (``None`` when the device
+    doesn't have the model). Read and set through the ``read_*`` / ``set_*``
+    methods - they re-discover once when the register map shifts (the data
+    type setting was changed on the device), which rebuilds the components,
+    so hold on to the inverter, not to a component.
+    """
 
     def __init__(self, unit: ModbusUnit, has_storage: bool | None = None) -> None:
         """Initialize with a Modbus unit addressing the inverter.
@@ -52,16 +66,16 @@ class FroniusModbusInverter:
         self._unit = unit
         self._has_storage_override = has_storage
         self._models: list[SunSpecModel] = []
-        self._device_identity_reader: DeviceIdentityReader | None = None
-        self._inverter_reader: InverterDataReader | None = None
-        self._mppt_reader: MpptReader | None = None
-        self._storage: StorageControls | None = None
-        self._controls: ImmediateControls | None = None
+        self.common: CommonModel | None = None
+        self.inverter: InverterModel | None = None
+        self.mppt: MpptModel | None = None
+        self.storage: StorageModel | None = None
+        self.controls: ControlsModel | None = None
         self.float_mode: bool | None = None
         self.has_storage: bool | None = has_storage
 
     async def discover(self) -> None:
-        """Discover the SunSpec models exposed by the device."""
+        """Discover the SunSpec models and build their components."""
         self._models = await discover_models(self._unit)
         model_ids = {model.model_id for model in self._models}
         if model_ids & INVERTER_MODELS_FLOAT:
@@ -77,38 +91,22 @@ class FroniusModbusInverter:
         )
         self.has_storage = has_storage
 
-        common_model = self._find_model(COMMON_MODEL_ID)
-        self._device_identity_reader = (
-            build_device_identity_reader(self._unit, common_model)
-            if common_model is not None
-            else None
-        )
-        inverter_model = self._find_model(
-            *INVERTER_MODELS_FLOAT, *INVERTER_MODELS_INT_SF
-        )
-        self._inverter_reader = (
-            build_inverter_reader(self._unit, inverter_model)
-            if inverter_model is not None
-            else None
-        )
-        mppt_model = self._find_model(MULTI_MPPT_MODEL_ID)
-        self._mppt_reader = (
-            build_mppt_reader(self._unit, mppt_model, has_storage)
-            if mppt_model is not None
-            else None
-        )
-        storage_model = self._find_model(STORAGE_MODEL_ID)
-        self._storage = (
-            build_storage_controls(self._unit, storage_model)
-            if storage_model is not None
-            else None
-        )
-        controls_model = self._find_model(IMMEDIATE_CONTROLS_MODEL_ID)
-        self._controls = (
-            build_immediate_controls(self._unit, controls_model)
-            if controls_model is not None
-            else None
-        )
+        unit = self._unit
+        common = self._find_model(COMMON_MODEL_ID)
+        self.common = CommonModel(unit, common) if common else None
+        inverter = self._find_model(*INVERTER_MODELS_FLOAT, *INVERTER_MODELS_INT_SF)
+        if inverter is None:
+            self.inverter = None
+        elif inverter.model_id in INVERTER_MODELS_FLOAT:
+            self.inverter = InverterFloatModel(unit, inverter)
+        else:
+            self.inverter = InverterIntegerModel(unit, inverter)
+        mppt = self._find_model(MULTI_MPPT_MODEL_ID)
+        self.mppt = MpptModel(unit, mppt, has_storage) if mppt else None
+        storage = self._find_model(STORAGE_MODEL_ID)
+        self.storage = StorageModel(unit, storage) if storage else None
+        controls = self._find_model(IMMEDIATE_CONTROLS_MODEL_ID)
+        self.controls = ControlsModel(unit, controls) if controls else None
 
     def _find_model(self, *model_ids: int) -> SunSpecModel | None:
         return next(
@@ -134,66 +132,43 @@ class FroniusModbusInverter:
         """Return the discovered SunSpec models."""
         return self._models
 
-    @property
-    def has_common_model(self) -> bool:
-        """Return whether the device exposes the Common model."""
-        return self._device_identity_reader is not None
-
-    @property
-    def has_inverter_model(self) -> bool:
-        """Return whether the device exposes an inverter model."""
-        return self._inverter_reader is not None
-
-    @property
-    def has_mppt(self) -> bool:
-        """Return whether the device exposes the Multiple MPPT model."""
-        return self._mppt_reader is not None
-
-    @property
-    def has_storage_model(self) -> bool:
-        """Return whether the device exposes the Basic Storage Control model."""
-        return self._storage is not None
-
-    @property
-    def has_immediate_controls(self) -> bool:
-        """Return whether the device exposes the Immediate Controls model."""
-        return self._controls is not None
-
-    async def read_device_identity(self) -> DeviceIdentity:
+    async def read_common(self) -> CommonModel:
         """Read manufacturer, model, version and serial from the Common model."""
-        return await self._read(lambda: self._device_identity_reader, "Common")
+        return await self._use(lambda: self.common, "Common", _updated)
 
-    async def read_inverter(self) -> InverterData:
+    async def read_inverter(self) -> InverterModel:
         """Read AC/DC values, energy and state from the inverter model."""
-        return await self._read(lambda: self._inverter_reader, "Inverter")
+        # spelled out instead of using _use: mypy cannot infer a union type
+        # parameter for the float/int variant classes
+        if (component := self.inverter) is None:
+            raise SunSpecError("Inverter model not available")
+        try:
+            await component.async_update()
+        except SunSpecError:
+            await self.discover()
+            if (component := self.inverter) is None:
+                raise
+            await component.async_update()
+        return component
 
-    async def read_mppt(self) -> MpptData:
+    async def read_mppt(self) -> MpptModel:
         """Read per-module DC values from the Multiple MPPT model."""
-        return await self._read(lambda: self._mppt_reader, "Multiple MPPT")
+        return await self._use(lambda: self.mppt, "Multiple MPPT", _updated)
 
-    async def read_storage(self) -> StorageData:
+    async def read_storage(self) -> StorageModel:
         """Read battery state and control setpoints from the storage model."""
-        return await self._read(
-            lambda: self._storage.read if self._storage else None, "Storage"
-        )
+        return await self._use(lambda: self.storage, "Storage", _updated)
 
-    async def read_power_limit(self) -> PowerLimit:
+    async def read_controls(self) -> ControlsModel:
         """Read the output power limit state from the Immediate Controls model."""
-        return await self._read(
-            lambda: self._controls.read if self._controls else None,
-            "Immediate Controls",
-        )
+        return await self._use(lambda: self.controls, "Immediate Controls", _updated)
 
     async def probe_write_access(self) -> bool:
-        """Check whether the device accepts Modbus writes.
-
-        Writes a harmless register's current value back to itself. There is
-        no register exposing the "inverter control via Modbus" web interface
-        setting.
-        """
-        return await self._read(
-            lambda: self._controls.probe_write_access if self._controls else None,
+        """Check whether the device accepts Modbus writes."""
+        return await self._use(
+            lambda: self.controls,
             "Immediate Controls",
+            lambda controls: controls.probe_write_access(),
         )
 
     async def set_power_limit(self, percent: float, *, revert_seconds: int = 0) -> None:
@@ -202,18 +177,18 @@ class FroniusModbusInverter:
         ``revert_seconds`` > 0 auto-reverts the limit if it isn't refreshed -
         recommended as a safety net; 0 keeps it active until cleared.
         """
-        await self._read(
-            lambda: self._controls_op(
-                lambda controls: controls.set_power_limit(percent, revert_seconds)
-            ),
+        await self._use(
+            lambda: self.controls,
             "Immediate Controls",
+            lambda controls: controls.set_power_limit(percent, revert_seconds),
         )
 
     async def clear_power_limit(self) -> None:
         """Disable the output power limit."""
-        await self._read(
-            lambda: self._controls_op(lambda controls: controls.clear_power_limit()),
+        await self._use(
+            lambda: self.controls,
             "Immediate Controls",
+            lambda controls: controls.clear_power_limit(),
         )
 
     async def set_storage_limits(
@@ -229,65 +204,46 @@ class FroniusModbusInverter:
         charging / discharging. ``revert_seconds`` > 0 auto-reverts the limits
         if they aren't refreshed; support varies by device generation.
         """
-        await self._read(
-            lambda: self._storage_op(
-                lambda storage: storage.set_limits(charge, discharge, revert_seconds)
-            ),
+        await self._use(
+            lambda: self.storage,
             "Storage",
+            lambda storage: storage.set_limits(charge, discharge, revert_seconds),
         )
 
     async def set_minimum_reserve(self, percent: float) -> None:
         """Set the minimum state of charge reserve in percent."""
-        await self._read(
-            lambda: self._storage_op(
-                lambda storage: storage.set_minimum_reserve(percent)
-            ),
+        await self._use(
+            lambda: self.storage,
             "Storage",
+            lambda storage: storage.set_minimum_reserve(percent),
         )
 
     async def set_grid_charging(self, enabled: bool) -> None:
         """Allow or prevent charging the storage from the grid."""
-        await self._read(
-            lambda: self._storage_op(
-                lambda storage: storage.set_grid_charging(enabled)
-            ),
+        await self._use(
+            lambda: self.storage,
             "Storage",
+            lambda storage: storage.set_grid_charging(enabled),
         )
 
-    def _controls_op(
-        self, operation: Callable[[ImmediateControls], Awaitable[None]]
-    ) -> Callable[[], Awaitable[None]] | None:
-        """Bind an operation to the current controls, refreshed on re-discovery."""
-        if (controls := self._controls) is None:
-            return None
-        return lambda: operation(controls)
-
-    def _storage_op(
-        self, operation: Callable[[StorageControls], Awaitable[None]]
-    ) -> Callable[[], Awaitable[None]] | None:
-        """Bind an operation to the current storage, refreshed on re-discovery."""
-        if (storage := self._storage) is None:
-            return None
-        return lambda: operation(storage)
-
-    async def _read[DataT](
+    async def _use[C, T](
         self,
-        get_reader: Callable[[], Callable[[], Awaitable[DataT]] | None],
+        get: Callable[[], C | None],
         name: str,
-    ) -> DataT:
-        """Run a model reader, re-discovering once on a register map shift.
+        operation: Callable[[C], Awaitable[T]],
+    ) -> T:
+        """Run an operation on a component, re-discovering once on a map shift.
 
-        Each reader batches its model into few pooled block requests, keeping
-        values and their scale factors of one update consistent.
+        The register map shifts when the data type setting is changed on the
+        device; the operation's update then raises on the header check, so
+        re-discover (rebuilding the components) and retry once.
         """
-        if (reader := get_reader()) is None:
+        if (component := get()) is None:
             raise SunSpecError(f"{name} model not available")
         try:
-            return await reader()
+            return await operation(component)
         except SunSpecError:
-            # The register map shifts when the data type setting is changed
-            # on the device. Re-discover once and retry.
             await self.discover()
-            if (reader := get_reader()) is None:
+            if (component := get()) is None:
                 raise
-            return await reader()
+            return await operation(component)

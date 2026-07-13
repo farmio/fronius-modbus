@@ -3,7 +3,7 @@
 import pytest
 from modbus_connection.mock import MockModbusUnit
 
-from fronius_modbus import FroniusModbusInverter, ModuleRole, MpptData
+from fronius_modbus import FroniusModbusInverter, ModuleRole, MpptModel
 from fronius_modbus.mppt import classify_modules
 from fronius_modbus.testing import MpptModuleSpec, build_sunspec_map
 
@@ -24,7 +24,7 @@ GEN24_HYBRID_MODULES = [
 
 async def _read_mppt(
     unit: MockModbusUnit, registers: dict[int, int], has_storage: bool
-) -> MpptData:
+) -> MpptModel:
     unit.holding.update(registers)
     inverter = FroniusModbusInverter(unit, has_storage=has_storage)
     await inverter.discover()
@@ -37,7 +37,6 @@ async def test_scaled_values(mock_modbus_unit: MockModbusUnit) -> None:
         mock_modbus_unit, build_sunspec_map(GEN24_HYBRID_MODULES), has_storage=True
     )
     module_1 = data.modules[0]
-    assert module_1.index == 1
     assert module_1.id_str == "MPPT 1"
     assert module_1.current == 8.2  # scale factor -1
     assert module_1.voltage == 402.1

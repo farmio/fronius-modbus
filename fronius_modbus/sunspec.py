@@ -7,10 +7,12 @@ of using fixed addresses.
 """
 
 from dataclasses import dataclass
-from typing import Final
+from typing import ClassVar, Final
 
 from modbus_connection import ModbusUnit
 from modbus_connection.decode import decode_uint32
+from modbus_connection.model import Component
+from modbus_connection.model import sunspec as sunspec_fields
 
 SUNSPEC_BASE_ADDRESS: Final = 40000
 SUNSPEC_MARKER: Final = 0x53756E53  # "SunS"
@@ -60,6 +62,43 @@ def check_model_header(
             f" expected {expected.model_id}/{expected.length},"
             f" read {model_id}/{length} - the register map has changed"
         )
+
+
+class SunSpecComponent(Component):
+    """A discovered SunSpec model, placed at its address and header-checked.
+
+    Subclasses declare their fields relative to the model start: the
+    2-register header sits at 0/1, the data block starts at 2. The header is
+    verified against the discovered model on every update - the register map
+    shifts when the data type setting is changed on the device, and a
+    mismatch raises :class:`SunSpecError` so the owner can re-discover.
+    """
+
+    model_name: ClassVar[str] = ""
+
+    model_id = sunspec_fields.uint16(0)
+    model_length = sunspec_fields.uint16(1)
+
+    def __init__(self, unit: ModbusUnit, model: SunSpecModel) -> None:
+        """Initialize the component at the discovered model's address."""
+        super().__init__(unit, base_offset=model.address)
+        self._model = model
+
+    async def async_update(self) -> None:
+        """Read the model's registers, verifying the header."""
+        await super().async_update()
+        check_model_header(
+            self._model, self.model_id, self.model_length, self.model_name
+        )
+
+    def __repr__(self) -> str:
+        """Return the component's field values."""
+        values = ", ".join(
+            f"{name}={getattr(self, name)!r}"
+            for name in self._register_fields
+            if name not in ("model_id", "model_length")
+        )
+        return f"{type(self).__name__}({values})"
 
 
 async def discover_models(unit: ModbusUnit) -> list[SunSpecModel]:

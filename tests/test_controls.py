@@ -28,13 +28,13 @@ def _model_data_address(inverter: FroniusModbusInverter, model_id: int) -> int:
     return model.address + 2
 
 
-async def test_read_power_limit(mock_modbus_unit: MockModbusUnit) -> None:
+async def test_read_controls(mock_modbus_unit: MockModbusUnit) -> None:
     """Test reading the power limit state."""
     inverter = await _discovered_inverter(mock_modbus_unit, build_sunspec_map([]))
-    assert inverter.has_immediate_controls is True
+    assert inverter.controls is not None
 
-    limit = await inverter.read_power_limit()
-    assert limit.percent == 100.0
+    limit = await inverter.read_controls()
+    assert limit.power_limit == 100.0
     assert limit.enabled is False
     assert limit.revert_seconds == 0
 
@@ -49,8 +49,8 @@ async def test_set_power_limit(mock_modbus_unit: MockModbusUnit) -> None:
     assert mock_modbus_unit.holding[data_address + 5] == 120  # RvrtTms
     assert mock_modbus_unit.holding[data_address + 7] == 1  # WMaxLim_Ena
 
-    limit = await inverter.read_power_limit()
-    assert limit.percent == 80.0
+    limit = await inverter.read_controls()
+    assert limit.power_limit == 80.0
     assert limit.enabled is True
     assert limit.revert_seconds == 120
 

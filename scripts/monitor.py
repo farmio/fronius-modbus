@@ -399,7 +399,7 @@ class MonitorApp(App[None]):
 
         sample: dict[str, float | None] = {}
 
-        if inverter.has_inverter_model:
+        if inverter.inverter is not None:
             data = await inverter.read_inverter()
             sample["ac_power"] = data.ac_power
             table = Table.grid(padding=(0, 1))
@@ -417,15 +417,15 @@ class MonitorApp(App[None]):
             table.add_row("Operating state", str(data.operating_state or "—"))
             self._panel("inverter", "Inverter", table)
 
-        if inverter.has_mppt:
+        if inverter.mppt is not None:
             mppt = await inverter.read_mppt()
             table = Table(expand=True)
             for column in ("Module", "Role", "Current", "Voltage", "Power", "Energy"):
                 table.add_column(column)
-            for module in mppt.modules:
-                sample[f"mod_{module.index}"] = module.power
+            for index, module in enumerate(mppt.modules, start=1):
+                sample[f"mod_{index}"] = module.power
                 table.add_row(
-                    f"{module.index} {module.id_str}",
+                    f"{index} {module.id_str}",
                     module.role.value,
                     _fmt(module.current, "A"),
                     _fmt(module.voltage, "V"),
@@ -433,9 +433,9 @@ class MonitorApp(App[None]):
                     _fmt(module.energy, "Wh"),
                 )
             self._panel("mppt", "MPPT modules", table)
-            self._ensure_series(inverter.has_inverter_model, mppt.modules)
+            self._ensure_series(inverter.inverter is not None, mppt.modules)
 
-        if inverter.has_storage_model:
+        if inverter.storage is not None:
             storage = await inverter.read_storage()
             table = Table.grid(padding=(0, 1))
             table.add_row("State of charge", _fmt(storage.state_of_charge, "%"))
@@ -457,10 +457,10 @@ class MonitorApp(App[None]):
             table.add_row("Grid charging", _bool(storage.grid_charging))
             self._panel("storage", "Storage", table)
 
-        if inverter.has_immediate_controls:
-            limit = await inverter.read_power_limit()
+        if inverter.controls is not None:
+            limit = await inverter.read_controls()
             table = Table.grid(padding=(0, 1))
-            table.add_row("Limit", _fmt(limit.percent, "%"))
+            table.add_row("Limit", _fmt(limit.power_limit, "%"))
             table.add_row("Enabled", _bool(limit.enabled))
             table.add_row("Revert", _fmt(limit.revert_seconds, "s", digits=0))
             self._panel("powerlimit", "Power limit", table)
@@ -480,9 +480,9 @@ class MonitorApp(App[None]):
             ModuleRole.STORAGE_DISCHARGE: "Battery discharge",
             ModuleRole.STORAGE_BIDIRECTIONAL: "Battery",
         }
-        for module in modules:
-            label = role_labels.get(module.role, f"MPPT {module.index}")
-            series.append((f"mod_{module.index}", label))
+        for index, module in enumerate(modules, start=1):
+            label = role_labels.get(module.role, f"MPPT {index}")
+            series.append((f"mod_{index}", label))
         self._series = series
         selector = self.query_one("#series", SelectionList)
         selector.border_title = "Series"

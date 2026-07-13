@@ -50,11 +50,11 @@ async def run_write_commands(
             await inverter.set_power_limit(
                 args.set_power_limit, revert_seconds=args.revert
             )
-            limit = await inverter.read_power_limit()
+            limit = await inverter.read_controls()
             print(f"\nPower limit set: {limit}")
         elif args.clear_power_limit:
             await inverter.clear_power_limit()
-            limit = await inverter.read_power_limit()
+            limit = await inverter.read_controls()
             print(f"\nPower limit cleared: {limit}")
 
         if args.set_charge_limit is not None or args.set_discharge_limit is not None:
@@ -112,9 +112,9 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
                 f"  length {model.length:>3}  {name}"
             )
 
-        if inverter.has_common_model:
+        if inverter.common is not None:
             try:
-                identity = await inverter.read_device_identity()
+                identity = await inverter.read_common()
             except (ModbusError, SunSpecError) as err:
                 print(f"Reading device identity failed: {err}")
             else:
@@ -125,7 +125,7 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
                 print(f"  version:       {identity.software_version}")
                 print(f"  serial number: {identity.serial_number}")
 
-        if inverter.has_inverter_model:
+        if inverter.inverter is not None:
             try:
                 ac_dc = await inverter.read_inverter()
             except (ModbusError, SunSpecError) as err:
@@ -166,7 +166,7 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
                     else "  events:          None"
                 )
 
-        if inverter.has_storage_model:
+        if inverter.storage is not None:
             try:
                 storage = await inverter.read_storage()
             except (ModbusError, SunSpecError) as err:
@@ -187,20 +187,20 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
                 )
                 print(f"  grid charging:          {storage.grid_charging}")
 
-        if inverter.has_immediate_controls:
+        if inverter.controls is not None:
             try:
-                limit = await inverter.read_power_limit()
+                limit = await inverter.read_controls()
             except (ModbusError, SunSpecError) as err:
                 print(f"Reading power limit failed: {err}")
             else:
                 print("\nPower limit:")
-                print(f"  percent:        {limit.percent} %")
+                print(f"  percent:        {limit.power_limit} %")
                 print(f"  enabled:        {limit.enabled}")
                 print(f"  revert seconds: {limit.revert_seconds}")
 
         await run_write_commands(inverter, args)
 
-        if not inverter.has_mppt:
+        if inverter.mppt is None:
             print("No Multiple MPPT model (160) found.")
             return
 
@@ -211,8 +211,8 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
             return
 
         print(f"\nMPPT modules (classified with has_storage={inverter.has_storage}):")
-        for module in data.modules:
-            print(f"  module {module.index}: IDStr={module.id_str!r}")
+        for index, module in enumerate(data.modules, start=1):
+            print(f"  module {index}: IDStr={module.id_str!r}")
             print(f"    role:    {module.role}")
             print(f"    current: {module.current} A")
             print(f"    voltage: {module.voltage} V")

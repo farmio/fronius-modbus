@@ -50,9 +50,9 @@ async def test_device_identity(mock_modbus_unit: MockModbusUnit) -> None:
     )
     inverter = FroniusModbusInverter(mock_modbus_unit)
     await inverter.discover()
-    assert inverter.has_common_model is True
+    assert inverter.common is not None
 
-    identity = await inverter.read_device_identity()
+    identity = await inverter.read_common()
     assert identity.manufacturer == "Fronius"
     assert identity.model == "Symo GEN24 10.0"
     assert identity.software_version == "1.36.5-1"
@@ -72,7 +72,7 @@ async def test_inverter_data(
     )
     inverter = FroniusModbusInverter(mock_modbus_unit)
     await inverter.discover()
-    assert inverter.has_inverter_model is True
+    assert inverter.inverter is not None
 
     data = await inverter.read_inverter()
     assert data.ac_current == 9.75
@@ -143,7 +143,7 @@ async def test_storage_data(mock_modbus_unit: MockModbusUnit) -> None:
     )
     inverter = FroniusModbusInverter(mock_modbus_unit)
     await inverter.discover()
-    assert inverter.has_storage_model is True
+    assert inverter.storage is not None
 
     data = await inverter.read_storage()
     assert data.charge_reference_power == 10000
@@ -167,7 +167,7 @@ async def test_storage_model_not_available(mock_modbus_unit: MockModbusUnit) -> 
     mock_modbus_unit.holding.update(build_sunspec_map([]))
     inverter = FroniusModbusInverter(mock_modbus_unit)
     await inverter.discover()
-    assert inverter.has_storage_model is False
+    assert inverter.storage is None
     with pytest.raises(SunSpecError, match="Storage model not available"):
         await inverter.read_storage()
 

@@ -57,21 +57,21 @@ async def main() -> None:
     print("Data type:", "float" if inverter.float_mode else "int+SF")
     print("Storage:", inverter.has_storage)  # auto-detected during discovery
 
-    identity = await inverter.read_device_identity()
+    identity = await inverter.read_common()
     print(identity.manufacturer, identity.model, identity.serial_number)
 
     ac_dc = await inverter.read_inverter()
     print("AC power:", ac_dc.ac_power, "state:", ac_dc.operating_state)
 
-    if inverter.has_mppt:
+    if inverter.mppt is not None:
         data = await inverter.read_mppt()
         for module in data.modules:
-            print(module.index, module.id_str, module.role, module.power)
+            print(module.id_str, module.role, module.power)
         print("PV energy total:", data.pv_energy_total)
         print("Battery charged:", data.storage_charge_energy_total)
         print("Battery discharged:", data.storage_discharge_energy_total)
 
-    if inverter.has_storage_model:
+    if inverter.storage is not None:
         storage = await inverter.read_storage()
         print("SoC:", storage.state_of_charge, "state:", storage.state)
 

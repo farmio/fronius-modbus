@@ -28,7 +28,7 @@ async def test_data_type_detection(
     inverter = FroniusModbusInverter(mock_modbus_unit, has_storage=False)
     await inverter.discover()
     assert inverter.float_mode is expected_float_mode
-    assert inverter.has_mppt is True
+    assert inverter.mppt is not None
 
     data = await inverter.read_mppt()
     assert data.modules[0].power == 3300
@@ -84,7 +84,7 @@ async def test_no_mppt_model(mock_modbus_unit: MockModbusUnit) -> None:
     mock_modbus_unit.holding.update(build_sunspec_map([], include_mppt_model=False))
     inverter = FroniusModbusInverter(mock_modbus_unit, has_storage=False)
     await inverter.discover()
-    assert inverter.has_mppt is False
+    assert inverter.mppt is None
     with pytest.raises(SunSpecError, match="not available"):
         await inverter.read_mppt()
 

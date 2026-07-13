@@ -4,25 +4,32 @@ Consumes a ``modbus_connection.ModbusUnit`` - connection lifecycle stays with
 the caller.
 """
 
-from .common import DeviceIdentity
-from .controls import PowerLimit
+from .common import CommonModel
+from .controls import ControlsModel
 from .inverter import GEN24_UNIT_ID, FroniusModbusInverter, datamanager_unit_id
-from .inverter_model import InverterData, OperatingState
-from .mppt import ModuleRole, MpptData, MpptModule
-from .storage import StorageData, StorageState
+from .inverter_model import (
+    InverterFloatModel,
+    InverterIntegerModel,
+    InverterModel,
+    OperatingState,
+)
+from .mppt import ModuleRole, MpptModel, MpptModule
+from .storage import StorageModel, StorageState
 from .sunspec import SunSpecError, SunSpecModel
 
 __all__ = [
     "GEN24_UNIT_ID",
-    "DeviceIdentity",
+    "CommonModel",
+    "ControlsModel",
     "FroniusModbusInverter",
-    "InverterData",
+    "InverterFloatModel",
+    "InverterIntegerModel",
+    "InverterModel",
     "ModuleRole",
-    "MpptData",
+    "MpptModel",
     "MpptModule",
     "OperatingState",
-    "PowerLimit",
-    "StorageData",
+    "StorageModel",
     "StorageState",
     "SunSpecError",
     "SunSpecModel",
