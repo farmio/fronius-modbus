@@ -2,7 +2,7 @@
 
 import functools
 from collections.abc import Awaitable, Callable
-from typing import Any, Concatenate, Final
+from typing import Concatenate, Final
 
 from modbus_connection import ModbusUnit
 
@@ -42,12 +42,11 @@ def datamanager_unit_id(inverter_number: str) -> int | None:
 def _uses_model[**P, T](
     attr: str,
 ) -> Callable[
-    [Callable[Concatenate["FroniusModbusInverter", Any, P], Awaitable[T]]],
+    [Callable[Concatenate["FroniusModbusInverter", P], Awaitable[T]]],
     Callable[Concatenate["FroniusModbusInverter", P], Awaitable[T]],
 ]:
-    """Resolve the method's component and recover from register map shifts.
+    """Guard a method that needs the component named by ``attr``.
 
-    The component named by ``attr`` is passed as the method's first argument.
     A missing model gets one re-discovery before failing - it may have
     appeared since. A :class:`SunSpecError` from the method means the
     register map shifted (the header check failed), so re-discover,
@@ -55,7 +54,7 @@ def _uses_model[**P, T](
     """
 
     def decorator(
-        method: Callable[Concatenate[FroniusModbusInverter, Any, P], Awaitable[T]],
+        method: Callable[Concatenate[FroniusModbusInverter, P], Awaitable[T]],
     ) -> Callable[Concatenate[FroniusModbusInverter, P], Awaitable[T]]:
         @functools.wraps(method)
         async def wrapper(
@@ -63,15 +62,15 @@ def _uses_model[**P, T](
         ) -> T:
             if getattr(self, attr) is None:
                 await self.discover()
-            if (component := getattr(self, attr)) is None:
-                raise SunSpecError(f"{attr.title()} model not available")
+                if getattr(self, attr) is None:
+                    raise SunSpecError(f"{attr.title()} model not available")
             try:
-                return await method(self, component, *args, **kwargs)
+                return await method(self, *args, **kwargs)
             except SunSpecError:
                 await self.discover()
-                if (component := getattr(self, attr)) is None:
+                if getattr(self, attr) is None:
                     raise
-                return await method(self, component, *args, **kwargs)
+                return await method(self, *args, **kwargs)
 
         return wrapper
 
@@ -167,60 +166,65 @@ class FroniusModbusInverter:
         return self._models
 
     @_uses_model("common")
-    async def read_common(self, common: Common) -> Common:
+    async def read_common(self) -> Common:
         """Read manufacturer, model, version and serial from the Common model."""
-        await common.async_update()
-        return common
+        assert self.common is not None
+        await self.common.async_update()
+        return self.common
 
     @_uses_model("inverter")
-    async def read_inverter(self, inverter: Inverter) -> Inverter:
+    async def read_inverter(self) -> Inverter:
         """Read AC/DC values, energy and state from the inverter model."""
-        await inverter.async_update()
-        return inverter
+        assert self.inverter is not None
+        await self.inverter.async_update()
+        return self.inverter
 
     @_uses_model("mppt")
-    async def read_mppt(self, mppt: Mppt) -> Mppt:
+    async def read_mppt(self) -> Mppt:
         """Read per-module DC values from the Multiple MPPT model."""
-        await mppt.async_update()
-        return mppt
+        assert self.mppt is not None
+        await self.mppt.async_update()
+        return self.mppt
 
     @_uses_model("storage")
-    async def read_storage(self, storage: Storage) -> Storage:
+    async def read_storage(self) -> Storage:
         """Read battery state and control setpoints from the storage model."""
-        await storage.async_update()
-        return storage
+        assert self.storage is not None
+        await self.storage.async_update()
+        return self.storage
 
     @_uses_model("controls")
-    async def read_controls(self, controls: Controls) -> Controls:
+    async def read_controls(self) -> Controls:
         """Read the output power limit state from the Immediate Controls model."""
-        await controls.async_update()
-        return controls
+        assert self.controls is not None
+        await self.controls.async_update()
+        return self.controls
 
     @_uses_model("controls")
-    async def probe_write_access(self, controls: Controls) -> bool:
+    async def probe_write_access(self) -> bool:
         """Check whether the device accepts Modbus writes."""
-        return await controls.probe_write_access()
+        assert self.controls is not None
+        return await self.controls.probe_write_access()
 
     @_uses_model("controls")
-    async def set_power_limit(
-        self, controls: Controls, percent: float, *, revert_seconds: int = 0
-    ) -> None:
+    async def set_power_limit(self, percent: float, *, revert_seconds: int = 0) -> None:
         """Limit output power to ``percent`` of the nominal power WMax.
 
         ``revert_seconds`` > 0 auto-reverts the limit if it isn't refreshed -
         recommended as a safety net; 0 keeps it active until cleared.
         """
-        await controls.set_power_limit(percent, revert_seconds)
+        assert self.controls is not None
+        await self.controls.set_power_limit(percent, revert_seconds)
 
     @_uses_model("controls")
-    async def clear_power_limit(self, controls: Controls) -> None:
+    async def clear_power_limit(self) -> None:
         """Disable the output power limit."""
-        await controls.clear_power_limit()
+        assert self.controls is not None
+        await self.controls.clear_power_limit()
 
     @_uses_model("storage")
     async def set_storage_limits(
         self,
-        storage: Storage,
         *,
         charge: float | None = None,
         discharge: float | None = None,
@@ -232,14 +236,17 @@ class FroniusModbusInverter:
         charging / discharging. ``revert_seconds`` > 0 auto-reverts the limits
         if they aren't refreshed; support varies by device generation.
         """
-        await storage.set_limits(charge, discharge, revert_seconds)
+        assert self.storage is not None
+        await self.storage.set_limits(charge, discharge, revert_seconds)
 
     @_uses_model("storage")
-    async def set_minimum_reserve(self, storage: Storage, percent: float) -> None:
+    async def set_minimum_reserve(self, percent: float) -> None:
         """Set the minimum state of charge reserve in percent."""
-        await storage.set_minimum_reserve(percent)
+        assert self.storage is not None
+        await self.storage.set_minimum_reserve(percent)
 
     @_uses_model("storage")
-    async def set_grid_charging(self, storage: Storage, enabled: bool) -> None:
+    async def set_grid_charging(self, enabled: bool) -> None:
         """Allow or prevent charging the storage from the grid."""
-        await storage.set_grid_charging(enabled)
+        assert self.storage is not None
+        await self.storage.set_grid_charging(enabled)
