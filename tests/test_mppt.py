@@ -3,7 +3,7 @@
 import pytest
 from modbus_connection.mock import MockModbusUnit
 
-from fronius_modbus import FroniusModbusInverter, ModuleRole, MpptModel
+from fronius_modbus import FroniusModbusInverter, ModuleRole, Mppt
 from fronius_modbus.testing import MpptModuleSpec, build_sunspec_map
 
 # module names as reported by real GEN24 hybrid inverters
@@ -23,7 +23,7 @@ GEN24_HYBRID_MODULES = [
 
 async def _read_mppt(
     unit: MockModbusUnit, registers: dict[int, int], has_storage: bool
-) -> MpptModel:
+) -> Mppt:
     unit.holding.update(registers)
     inverter = FroniusModbusInverter(unit, has_storage=has_storage)
     await inverter.discover()

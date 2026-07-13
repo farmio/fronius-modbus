@@ -5,7 +5,7 @@ from modbus_connection.model import sunspec as sunspec_fields
 from .sunspec import SunSpecComponent
 
 
-class CommonModel(SunSpecComponent):
+class Common(SunSpecComponent):
     """Manufacturer, model, version and serial number of the device."""
 
     manufacturer = sunspec_fields.string(2, 16)

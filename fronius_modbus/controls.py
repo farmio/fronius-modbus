@@ -17,7 +17,7 @@ from modbus_connection.model.fields import NumberField
 from .sunspec import SunSpecComponent, SunSpecError
 
 
-class ControlsModel(SunSpecComponent):
+class Controls(SunSpecComponent):
     """The Immediate Controls model: output power limit state and setters."""
 
     # harmless read-write register used to probe write access

@@ -30,7 +30,7 @@ class MpptModule(Component):
     """One MPPT module (DC input), declared at the first module block.
 
     Scale factors are shared by all modules and sit in the model's fixed
-    block. Roles are classified by the owning :class:`MpptModel`.
+    block. Roles are classified by the owning :class:`Mppt`.
     """
 
     id_str = sunspec_fields.string(11, 8)
@@ -47,7 +47,7 @@ class MpptModule(Component):
 _module_count: NumberField[int] = NumberField(8, signed=False, nan=0xFFFF)
 
 
-class MpptModel(SunSpecComponent):
+class Mppt(SunSpecComponent):
     """The Multiple MPPT model: per-module DC values, roles classified."""
 
     modules = repeating_group(_module_count, MpptModule, stride=20)

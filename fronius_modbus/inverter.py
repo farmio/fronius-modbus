@@ -6,11 +6,11 @@ from typing import Any, Concatenate, Final
 
 from modbus_connection import ModbusUnit
 
-from .common import CommonModel
-from .controls import ControlsModel
-from .inverter_model import InverterFloatModel, InverterIntegerModel, InverterModel
-from .mppt import MpptModel
-from .storage import WCHA_MAX, StorageModel
+from .common import Common
+from .controls import Controls
+from .inverter_model import Inverter, InverterFloat, InverterInteger
+from .mppt import Mppt
+from .storage import WCHA_MAX, Storage
 from .sunspec import (
     COMMON_MODEL_ID,
     IMMEDIATE_CONTROLS_MODEL_ID,
@@ -100,11 +100,11 @@ class FroniusModbusInverter:
         self._unit = unit
         self._has_storage_override = has_storage
         self._models: list[SunSpecModel] = []
-        self.common: CommonModel | None = None
-        self.inverter: InverterModel | None = None
-        self.mppt: MpptModel | None = None
-        self.storage: StorageModel | None = None
-        self.controls: ControlsModel | None = None
+        self.common: Common | None = None
+        self.inverter: Inverter | None = None
+        self.mppt: Mppt | None = None
+        self.storage: Storage | None = None
+        self.controls: Controls | None = None
         self.float_mode: bool | None = None
         self.has_storage: bool | None = has_storage
 
@@ -127,20 +127,20 @@ class FroniusModbusInverter:
 
         unit = self._unit
         common = self._find_model(COMMON_MODEL_ID)
-        self.common = CommonModel(unit, common) if common else None
+        self.common = Common(unit, common) if common else None
         inverter = self._find_model(*INVERTER_MODELS_FLOAT, *INVERTER_MODELS_INT_SF)
         if inverter is None:
             self.inverter = None
         elif inverter.model_id in INVERTER_MODELS_FLOAT:
-            self.inverter = InverterFloatModel(unit, inverter)
+            self.inverter = InverterFloat(unit, inverter)
         else:
-            self.inverter = InverterIntegerModel(unit, inverter)
+            self.inverter = InverterInteger(unit, inverter)
         mppt = self._find_model(MULTI_MPPT_MODEL_ID)
-        self.mppt = MpptModel(unit, mppt, has_storage) if mppt else None
+        self.mppt = Mppt(unit, mppt, has_storage) if mppt else None
         storage = self._find_model(STORAGE_MODEL_ID)
-        self.storage = StorageModel(unit, storage) if storage else None
+        self.storage = Storage(unit, storage) if storage else None
         controls = self._find_model(IMMEDIATE_CONTROLS_MODEL_ID)
-        self.controls = ControlsModel(unit, controls) if controls else None
+        self.controls = Controls(unit, controls) if controls else None
 
     def _find_model(self, *model_ids: int) -> SunSpecModel | None:
         return next(
@@ -167,43 +167,43 @@ class FroniusModbusInverter:
         return self._models
 
     @_uses_model("common")
-    async def read_common(self, common: CommonModel) -> CommonModel:
+    async def read_common(self, common: Common) -> Common:
         """Read manufacturer, model, version and serial from the Common model."""
         await common.async_update()
         return common
 
     @_uses_model("inverter")
-    async def read_inverter(self, inverter: InverterModel) -> InverterModel:
+    async def read_inverter(self, inverter: Inverter) -> Inverter:
         """Read AC/DC values, energy and state from the inverter model."""
         await inverter.async_update()
         return inverter
 
     @_uses_model("mppt")
-    async def read_mppt(self, mppt: MpptModel) -> MpptModel:
+    async def read_mppt(self, mppt: Mppt) -> Mppt:
         """Read per-module DC values from the Multiple MPPT model."""
         await mppt.async_update()
         return mppt
 
     @_uses_model("storage")
-    async def read_storage(self, storage: StorageModel) -> StorageModel:
+    async def read_storage(self, storage: Storage) -> Storage:
         """Read battery state and control setpoints from the storage model."""
         await storage.async_update()
         return storage
 
     @_uses_model("controls")
-    async def read_controls(self, controls: ControlsModel) -> ControlsModel:
+    async def read_controls(self, controls: Controls) -> Controls:
         """Read the output power limit state from the Immediate Controls model."""
         await controls.async_update()
         return controls
 
     @_uses_model("controls")
-    async def probe_write_access(self, controls: ControlsModel) -> bool:
+    async def probe_write_access(self, controls: Controls) -> bool:
         """Check whether the device accepts Modbus writes."""
         return await controls.probe_write_access()
 
     @_uses_model("controls")
     async def set_power_limit(
-        self, controls: ControlsModel, percent: float, *, revert_seconds: int = 0
+        self, controls: Controls, percent: float, *, revert_seconds: int = 0
     ) -> None:
         """Limit output power to ``percent`` of the nominal power WMax.
 
@@ -213,14 +213,14 @@ class FroniusModbusInverter:
         await controls.set_power_limit(percent, revert_seconds)
 
     @_uses_model("controls")
-    async def clear_power_limit(self, controls: ControlsModel) -> None:
+    async def clear_power_limit(self, controls: Controls) -> None:
         """Disable the output power limit."""
         await controls.clear_power_limit()
 
     @_uses_model("storage")
     async def set_storage_limits(
         self,
-        storage: StorageModel,
+        storage: Storage,
         *,
         charge: float | None = None,
         discharge: float | None = None,
@@ -235,11 +235,11 @@ class FroniusModbusInverter:
         await storage.set_limits(charge, discharge, revert_seconds)
 
     @_uses_model("storage")
-    async def set_minimum_reserve(self, storage: StorageModel, percent: float) -> None:
+    async def set_minimum_reserve(self, storage: Storage, percent: float) -> None:
         """Set the minimum state of charge reserve in percent."""
         await storage.set_minimum_reserve(percent)
 
     @_uses_model("storage")
-    async def set_grid_charging(self, storage: StorageModel, enabled: bool) -> None:
+    async def set_grid_charging(self, storage: Storage, enabled: bool) -> None:
         """Allow or prevent charging the storage from the grid."""
         await storage.set_grid_charging(enabled)

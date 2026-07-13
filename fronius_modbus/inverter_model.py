@@ -43,7 +43,7 @@ _OPERATING_STATES: Final = {
 }
 
 
-class InverterFloatModel(SunSpecComponent):
+class InverterFloat(SunSpecComponent):
     """An inverter model in float encoding (111-113)."""
 
     ac_current = sunspec_fields.float32(2, unit="A")
@@ -72,7 +72,7 @@ class InverterFloatModel(SunSpecComponent):
     events = sunspec_fields.bitfield32(50)  # Evt1
 
 
-class InverterIntegerModel(SunSpecComponent):
+class InverterInteger(SunSpecComponent):
     """An inverter model in int+SF encoding (101-103)."""
 
     ac_current = sunspec_fields.uint16(2, scale_register=6, unit="A")
@@ -104,4 +104,4 @@ class InverterIntegerModel(SunSpecComponent):
     events = sunspec_fields.bitfield32(40)  # Evt1
 
 
-type InverterModel = InverterFloatModel | InverterIntegerModel
+type Inverter = InverterFloat | InverterInteger

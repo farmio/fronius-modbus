@@ -51,7 +51,7 @@ _STORAGE_STATES: Final = {
 }
 
 
-class StorageModel(SunSpecComponent):
+class Storage(SunSpecComponent):
     """The storage model: battery state and charge/discharge setpoints."""
 
     charge_reference_power = sunspec_fields.uint16(2, scale_register=18, unit="W")
