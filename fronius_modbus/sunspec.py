@@ -63,9 +63,11 @@ class SunSpecComponent(Component):
         super().__init__(unit, base_offset=model.address)
         self._model = model
 
-    async def async_update(self) -> None:
-        """Read the model's registers, verifying the header."""
-        await super().async_update()
+    def notify(self) -> None:
+        """Verify the read-back model header, then fire the update listeners.
+
+        Runs on every update, own or pooled through a ``ComponentGroup``.
+        """
         if (
             self.model_id != self._model.model_id
             or self.model_length != self._model.length
@@ -76,6 +78,7 @@ class SunSpecComponent(Component):
                 f" read {self.model_id}/{self.model_length}"
                 " - the register map has changed"
             )
+        super().notify()
 
     def __repr__(self) -> str:
         """Return the component's field values."""

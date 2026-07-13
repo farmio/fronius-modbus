@@ -16,7 +16,7 @@ import sys
 from modbus_connection import ModbusError
 from modbus_connection.tmodbus import connect_tcp
 
-from fronius_modbus import FroniusModbusInverter, SunSpecError
+from fronius_modbus import Controls, FroniusModbusInverter, Storage, SunSpecError
 
 MODEL_NAMES = {
     1: "Common",
@@ -37,44 +37,66 @@ MODEL_NAMES = {
 }
 
 
+def _controls(inverter: FroniusModbusInverter) -> Controls:
+    if inverter.controls is None:
+        raise SunSpecError("Immediate Controls model not available")
+    return inverter.controls
+
+
+def _storage(inverter: FroniusModbusInverter) -> Storage:
+    if inverter.storage is None:
+        raise SunSpecError("Storage model not available")
+    return inverter.storage
+
+
 async def run_write_commands(
     inverter: FroniusModbusInverter, args: argparse.Namespace
 ) -> None:
     """Execute requested write commands and report the results."""
     try:
         if args.probe_write:
-            allowed = await inverter.probe_write_access()
+            allowed = await _controls(inverter).probe_write_access()
             print(f"\nWrite access probe: {'accepted' if allowed else 'REJECTED'}")
 
         if args.set_power_limit is not None:
-            await inverter.set_power_limit(
+            controls = _controls(inverter)
+            await controls.set_power_limit(
                 args.set_power_limit, revert_seconds=args.revert
             )
-            limit = await inverter.read_controls()
-            print(f"\nPower limit set: {limit}")
+            await controls.async_update()
+            print(f"\nPower limit set: {controls}")
         elif args.clear_power_limit:
-            await inverter.clear_power_limit()
-            limit = await inverter.read_controls()
-            print(f"\nPower limit cleared: {limit}")
+            controls = _controls(inverter)
+            await controls.clear_power_limit()
+            await controls.async_update()
+            print(f"\nPower limit cleared: {controls}")
 
         if args.set_charge_limit is not None or args.set_discharge_limit is not None:
-            await inverter.set_storage_limits(
+            storage = _storage(inverter)
+            await storage.set_limits(
                 charge=args.set_charge_limit,
                 discharge=args.set_discharge_limit,
                 revert_seconds=args.revert,
             )
-            print(f"\nStorage limits set: {await inverter.read_storage()}")
+            await storage.async_update()
+            print(f"\nStorage limits set: {storage}")
         elif args.clear_storage_limits:
-            await inverter.set_storage_limits()
-            print(f"\nStorage limits cleared: {await inverter.read_storage()}")
+            storage = _storage(inverter)
+            await storage.set_limits()
+            await storage.async_update()
+            print(f"\nStorage limits cleared: {storage}")
 
         if args.set_reserve is not None:
-            await inverter.set_minimum_reserve(args.set_reserve)
-            print(f"\nMinimum reserve set: {await inverter.read_storage()}")
+            storage = _storage(inverter)
+            await storage.set_minimum_reserve(args.set_reserve)
+            await storage.async_update()
+            print(f"\nMinimum reserve set: {storage}")
 
         if args.set_grid_charging is not None:
-            await inverter.set_grid_charging(args.set_grid_charging == "on")
-            print(f"\nGrid charging set: {await inverter.read_storage()}")
+            storage = _storage(inverter)
+            await storage.set_grid_charging(args.set_grid_charging == "on")
+            await storage.async_update()
+            print(f"\nGrid charging set: {storage}")
     except (ModbusError, SunSpecError) as err:
         print(f"\nWrite failed: {err}")
         print('Is "inverter control via Modbus" enabled on the web interface?')
@@ -112,102 +134,82 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
                 f"  length {model.length:>3}  {name}"
             )
 
-        if inverter.common is not None:
-            try:
-                identity = await inverter.read_common()
-            except (ModbusError, SunSpecError) as err:
-                print(f"Reading device identity failed: {err}")
-            else:
-                print("\nDevice identity:")
-                print(f"  manufacturer:  {identity.manufacturer}")
-                print(f"  model:         {identity.model}")
-                print(f"  options:       {identity.options}")
-                print(f"  version:       {identity.software_version}")
-                print(f"  serial number: {identity.serial_number}")
+        try:
+            await inverter.async_update()
+        except (ModbusError, SunSpecError) as err:
+            print(f"Reading data failed: {err}")
+            return
 
-        if inverter.inverter is not None:
-            try:
-                ac_dc = await inverter.read_inverter()
-            except (ModbusError, SunSpecError) as err:
-                print(f"Reading inverter data failed: {err}")
-            else:
-                print("\nInverter:")
-                print(f"  AC power:        {ac_dc.ac_power} W")
-                print(f"  frequency:       {ac_dc.frequency} Hz")
-                print(f"  energy total:    {ac_dc.energy_total} Wh")
-                print(f"  AC current:      {ac_dc.ac_current} A")
-                print(
-                    "  phase currents:  "
-                    f"{ac_dc.ac_current_phase_1} / {ac_dc.ac_current_phase_2}"
-                    f" / {ac_dc.ac_current_phase_3} A"
-                )
-                print(
-                    "  phase voltages:  "
-                    f"{ac_dc.voltage_phase_1} / {ac_dc.voltage_phase_2}"
-                    f" / {ac_dc.voltage_phase_3} V"
-                )
-                print(
-                    "  phase-phase:     "
-                    f"{ac_dc.voltage_phase_1_2} / {ac_dc.voltage_phase_2_3}"
-                    f" / {ac_dc.voltage_phase_3_1} V"
-                )
-                print(f"  apparent power:  {ac_dc.apparent_power} VA")
-                print(f"  reactive power:  {ac_dc.reactive_power} var")
-                print(f"  power factor:    {ac_dc.power_factor} %")
-                print(
-                    f"  DC totals:       {ac_dc.dc_current} A / {ac_dc.dc_voltage} V"
-                    f" / {ac_dc.dc_power} W"
-                )
-                print(f"  operating state: {ac_dc.operating_state}")
-                print(f"  vendor state:    {ac_dc.vendor_operating_state}")
-                print(
-                    f"  events:          {ac_dc.events:#010x}"
-                    if ac_dc.events is not None
-                    else "  events:          None"
-                )
+        if (identity := inverter.common) is not None:
+            print("\nDevice identity:")
+            print(f"  manufacturer:  {identity.manufacturer}")
+            print(f"  model:         {identity.model}")
+            print(f"  options:       {identity.options}")
+            print(f"  version:       {identity.software_version}")
+            print(f"  serial number: {identity.serial_number}")
 
-        if inverter.storage is not None:
-            try:
-                storage = await inverter.read_storage()
-            except (ModbusError, SunSpecError) as err:
-                print(f"Reading storage data failed: {err}")
-            else:
-                print("\nStorage:")
-                print(f"  state of charge:        {storage.state_of_charge} %")
-                print(f"  state:                  {storage.state}")
-                print(f"  charge reference power: {storage.charge_reference_power} W")
-                print(f"  minimum reserve:        {storage.minimum_reserve} %")
-                print(
-                    f"  charge limit:           {storage.charge_limit} %"
-                    f" (enabled: {storage.charge_limit_enabled})"
-                )
-                print(
-                    f"  discharge limit:        {storage.discharge_limit} %"
-                    f" (enabled: {storage.discharge_limit_enabled})"
-                )
-                print(f"  grid charging:          {storage.grid_charging}")
+        if (ac_dc := inverter.inverter) is not None:
+            print("\nInverter:")
+            print(f"  AC power:        {ac_dc.ac_power} W")
+            print(f"  frequency:       {ac_dc.frequency} Hz")
+            print(f"  energy total:    {ac_dc.energy_total} Wh")
+            print(f"  AC current:      {ac_dc.ac_current} A")
+            print(
+                "  phase currents:  "
+                f"{ac_dc.ac_current_phase_1} / {ac_dc.ac_current_phase_2}"
+                f" / {ac_dc.ac_current_phase_3} A"
+            )
+            print(
+                "  phase voltages:  "
+                f"{ac_dc.voltage_phase_1} / {ac_dc.voltage_phase_2}"
+                f" / {ac_dc.voltage_phase_3} V"
+            )
+            print(
+                "  phase-phase:     "
+                f"{ac_dc.voltage_phase_1_2} / {ac_dc.voltage_phase_2_3}"
+                f" / {ac_dc.voltage_phase_3_1} V"
+            )
+            print(f"  apparent power:  {ac_dc.apparent_power} VA")
+            print(f"  reactive power:  {ac_dc.reactive_power} var")
+            print(f"  power factor:    {ac_dc.power_factor} %")
+            print(
+                f"  DC totals:       {ac_dc.dc_current} A / {ac_dc.dc_voltage} V"
+                f" / {ac_dc.dc_power} W"
+            )
+            print(f"  operating state: {ac_dc.operating_state}")
+            print(f"  vendor state:    {ac_dc.vendor_operating_state}")
+            print(
+                f"  events:          {ac_dc.events:#010x}"
+                if ac_dc.events is not None
+                else "  events:          None"
+            )
 
-        if inverter.controls is not None:
-            try:
-                limit = await inverter.read_controls()
-            except (ModbusError, SunSpecError) as err:
-                print(f"Reading power limit failed: {err}")
-            else:
-                print("\nPower limit:")
-                print(f"  percent:        {limit.power_limit} %")
-                print(f"  enabled:        {limit.enabled}")
-                print(f"  revert seconds: {limit.revert_seconds}")
+        if (storage := inverter.storage) is not None:
+            print("\nStorage:")
+            print(f"  state of charge:        {storage.state_of_charge} %")
+            print(f"  state:                  {storage.state}")
+            print(f"  charge reference power: {storage.charge_reference_power} W")
+            print(f"  minimum reserve:        {storage.minimum_reserve} %")
+            print(
+                f"  charge limit:           {storage.charge_limit} %"
+                f" (enabled: {storage.charge_limit_enabled})"
+            )
+            print(
+                f"  discharge limit:        {storage.discharge_limit} %"
+                f" (enabled: {storage.discharge_limit_enabled})"
+            )
+            print(f"  grid charging:          {storage.grid_charging}")
+
+        if (limit := inverter.controls) is not None:
+            print("\nPower limit:")
+            print(f"  percent:        {limit.power_limit} %")
+            print(f"  enabled:        {limit.enabled}")
+            print(f"  revert seconds: {limit.revert_seconds}")
 
         await run_write_commands(inverter, args)
 
-        if inverter.mppt is None:
+        if (data := inverter.mppt) is None:
             print("No Multiple MPPT model (160) found.")
-            return
-
-        try:
-            data = await inverter.read_mppt()
-        except (ModbusError, SunSpecError) as err:
-            print(f"Reading MPPT data failed: {err}")
             return
 
         print(f"\nMPPT modules (classified with has_storage={inverter.has_storage}):")

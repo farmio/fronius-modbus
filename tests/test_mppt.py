@@ -27,7 +27,9 @@ async def _read_mppt(
     unit.holding.update(registers)
     inverter = FroniusModbusInverter(unit, has_storage=has_storage)
     await inverter.discover()
-    return await inverter.read_mppt()
+    await inverter.async_update()
+    assert inverter.mppt is not None
+    return inverter.mppt
 
 
 async def test_scaled_values(mock_modbus_unit: MockModbusUnit) -> None:

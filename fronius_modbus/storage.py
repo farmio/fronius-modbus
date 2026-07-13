@@ -90,9 +90,10 @@ class Storage(SunSpecComponent):
 
     async def set_limits(
         self,
-        charge: float | None,
-        discharge: float | None,
-        revert_seconds: int,
+        *,
+        charge: float | None = None,
+        discharge: float | None = None,
+        revert_seconds: int = 0,
     ) -> None:
         """Limit charge / discharge rates in percent of WChaMax.
 

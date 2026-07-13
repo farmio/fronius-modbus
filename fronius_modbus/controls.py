@@ -30,7 +30,7 @@ class Controls(SunSpecComponent):
     )
     power_limit_sf = sunspec_fields.sunssf(23)
 
-    async def set_power_limit(self, percent: float, revert_seconds: int) -> None:
+    async def set_power_limit(self, percent: float, *, revert_seconds: int = 0) -> None:
         """Limit output power to ``percent`` of the nominal power and enable.
 
         ``revert_seconds`` > 0 auto-reverts the limit if it isn't refreshed -
