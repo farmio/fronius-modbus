@@ -7,6 +7,7 @@ tables (fronius.com/QR-link/0006) for Datamanager and GEN24.
 """
 
 from enum import StrEnum
+from functools import cached_property
 
 from modbus_connection import ModbusUnit
 from modbus_connection.model import Component, repeating_group
@@ -29,11 +30,8 @@ class MpptModule(Component):
     """One MPPT module (DC input), declared at the first module block.
 
     Scale factors are shared by all modules and sit in the model's fixed
-    block. ``role`` is classified by the owning :class:`MpptModel` after
-    each update.
+    block. Roles are classified by the owning :class:`MpptModel`.
     """
-
-    role: ModuleRole
 
     id_str = sunspec_fields.string(11, 8)
     current = sunspec_fields.uint16(19, scale_register=2, unit="A")
@@ -49,37 +47,6 @@ class MpptModule(Component):
 _module_count: NumberField[int] = NumberField(8, signed=False, nan=0xFFFF)
 
 
-def classify_modules(id_strs: list[str], has_storage: bool) -> list[ModuleRole]:
-    """Determine the role of each MPPT module.
-
-    Storage-related ID strings are matched first - GEN24 hybrids name their
-    modules "MPPT 1", "MPPT 2", "StCha 3" and "StDisCha 4". When the names
-    are inconclusive and the system has a storage, a 4-module inverter is
-    assumed to be a hybrid exposing dedicated charge/discharge modules after
-    the PV strings. Everything else defaults to PV - including module 2 of a
-    Symo Hybrid, which is safe since those don't support lifetime energy
-    anyway and a plain 2-MPPT inverter in a SolarNet ring with a hybrid
-    would otherwise get wrong PV totals.
-    """
-    roles: list[ModuleRole | None] = []
-    for id_str in id_strs:
-        name = id_str.lower()
-        if "discha" in name:  # "StDisCha 4" / "discharge"
-            roles.append(ModuleRole.STORAGE_DISCHARGE)
-        elif "cha" in name:  # "StCha 3" / "charge"
-            roles.append(ModuleRole.STORAGE_CHARGE)
-        elif "bat" in name or "storage" in name:
-            roles.append(ModuleRole.STORAGE_BIDIRECTIONAL)
-        else:
-            roles.append(None)
-
-    if has_storage and len(roles) == 4 and all(role is None for role in roles):
-        roles[2] = ModuleRole.STORAGE_CHARGE
-        roles[3] = ModuleRole.STORAGE_DISCHARGE
-
-    return [role if role is not None else ModuleRole.PV for role in roles]
-
-
 class MpptModel(SunSpecComponent):
     """The Multiple MPPT model: per-module DC values, roles classified."""
 
@@ -91,15 +58,40 @@ class MpptModel(SunSpecComponent):
         """``has_storage`` steers the module role classification."""
         super().__init__(unit, model)
         self._has_storage = has_storage
+        # re-classify when an update resizes or renames the modules
+        self.add_update_listener(lambda: self.__dict__.pop("module_roles", None))
 
-    async def async_update(self) -> None:
-        """Read the model and classify each module's role."""
-        await super().async_update()
-        roles = classify_modules(
-            [module.id_str or "" for module in self.modules], self._has_storage
-        )
-        for module, role in zip(self.modules, roles, strict=True):
-            module.role = role
+    @cached_property
+    def module_roles(self) -> list[ModuleRole]:
+        """The role of each MPPT module, aligned with :attr:`modules`.
+
+        Storage-related ID strings are matched first - GEN24 hybrids name
+        their modules "MPPT 1", "MPPT 2", "StCha 3" and "StDisCha 4". When
+        the names are inconclusive and the system has a storage, a 4-module
+        inverter is assumed to be a hybrid exposing dedicated
+        charge/discharge modules after the PV strings. Everything else
+        defaults to PV - including module 2 of a Symo Hybrid, which is safe
+        since those don't support lifetime energy anyway and a plain 2-MPPT
+        inverter in a SolarNet ring with a hybrid would otherwise get wrong
+        PV totals.
+        """
+        roles: list[ModuleRole | None] = []
+        for module in self.modules:
+            name = (module.id_str or "").lower()
+            if "discha" in name:  # "StDisCha 4" / "discharge"
+                roles.append(ModuleRole.STORAGE_DISCHARGE)
+            elif "cha" in name:  # "StCha 3" / "charge"
+                roles.append(ModuleRole.STORAGE_CHARGE)
+            elif "bat" in name or "storage" in name:
+                roles.append(ModuleRole.STORAGE_BIDIRECTIONAL)
+            else:
+                roles.append(None)
+
+        if self._has_storage and len(roles) == 4 and all(r is None for r in roles):
+            roles[2] = ModuleRole.STORAGE_CHARGE
+            roles[3] = ModuleRole.STORAGE_DISCHARGE
+
+        return [role if role is not None else ModuleRole.PV for role in roles]
 
     @property
     def pv_energy_total(self) -> float | None:
@@ -108,7 +100,9 @@ class MpptModel(SunSpecComponent):
         None if any PV module doesn't report energy to avoid undercounting.
         """
         pv_energies = [
-            module.energy for module in self.modules if module.role is ModuleRole.PV
+            module.energy
+            for module, role in zip(self.modules, self.module_roles, strict=True)
+            if role is ModuleRole.PV
         ]
         if not pv_energies or None in pv_energies:
             return None
@@ -124,7 +118,12 @@ class MpptModel(SunSpecComponent):
         """Lifetime energy discharged from the storage."""
         return self._storage_energy(ModuleRole.STORAGE_DISCHARGE)
 
-    def _storage_energy(self, role: ModuleRole) -> float | None:
+    def _storage_energy(self, wanted: ModuleRole) -> float | None:
         return next(
-            (module.energy for module in self.modules if module.role is role), None
+            (
+                module.energy
+                for module, role in zip(self.modules, self.module_roles, strict=True)
+                if role is wanted
+            ),
+            None,
         )

@@ -422,18 +422,20 @@ class MonitorApp(App[None]):
             table = Table(expand=True)
             for column in ("Module", "Role", "Current", "Voltage", "Power", "Energy"):
                 table.add_column(column)
-            for index, module in enumerate(mppt.modules, start=1):
+            for index, (module, role) in enumerate(
+                zip(mppt.modules, mppt.module_roles, strict=True), start=1
+            ):
                 sample[f"mod_{index}"] = module.power
                 table.add_row(
                     f"{index} {module.id_str}",
-                    module.role.value,
+                    role.value,
                     _fmt(module.current, "A"),
                     _fmt(module.voltage, "V"),
                     _fmt(module.power, "W"),
                     _fmt(module.energy, "Wh"),
                 )
             self._panel("mppt", "MPPT modules", table)
-            self._ensure_series(inverter.inverter is not None, mppt.modules)
+            self._ensure_series(inverter.inverter is not None, mppt.module_roles)
 
         if inverter.storage is not None:
             storage = await inverter.read_storage()
@@ -468,7 +470,7 @@ class MonitorApp(App[None]):
         self._history.append((monotonic(), sample))
         self._redraw_graph()
 
-    def _ensure_series(self, has_ac: bool, modules: list[Any]) -> None:
+    def _ensure_series(self, has_ac: bool, roles: list[ModuleRole]) -> None:
         """Populate the series selector once, from the discovered layout."""
         if self._series:
             return
@@ -480,8 +482,8 @@ class MonitorApp(App[None]):
             ModuleRole.STORAGE_DISCHARGE: "Battery discharge",
             ModuleRole.STORAGE_BIDIRECTIONAL: "Battery",
         }
-        for index, module in enumerate(modules, start=1):
-            label = role_labels.get(module.role, f"MPPT {index}")
+        for index, role in enumerate(roles, start=1):
+            label = role_labels.get(role, f"MPPT {index}")
             series.append((f"mod_{index}", label))
         self._series = series
         selector = self.query_one("#series", SelectionList)

@@ -211,9 +211,11 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
             return
 
         print(f"\nMPPT modules (classified with has_storage={inverter.has_storage}):")
-        for index, module in enumerate(data.modules, start=1):
+        for index, (module, role) in enumerate(
+            zip(data.modules, data.module_roles, strict=True), start=1
+        ):
             print(f"  module {index}: IDStr={module.id_str!r}")
-            print(f"    role:    {module.role}")
+            print(f"    role:    {role}")
             print(f"    current: {module.current} A")
             print(f"    voltage: {module.voltage} V")
             print(f"    power:   {module.power} W")
