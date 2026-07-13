@@ -2,7 +2,7 @@
 
 import functools
 from collections.abc import Awaitable, Callable
-from typing import Concatenate, Final
+from typing import Any, Concatenate, Final
 
 from modbus_connection import ModbusUnit
 
@@ -39,27 +39,43 @@ def datamanager_unit_id(inverter_number: str) -> int | None:
     return number or 100
 
 
-def _rediscovers_on_shift[**P, T](
-    method: Callable[Concatenate["FroniusModbusInverter", P], Awaitable[T]],
-) -> Callable[Concatenate["FroniusModbusInverter", P], Awaitable[T]]:
-    """Retry a method once after re-discovery when it hits a map shift.
+def _uses_model[**P, T](
+    attr: str,
+) -> Callable[
+    [Callable[Concatenate["FroniusModbusInverter", Any, P], Awaitable[T]]],
+    Callable[Concatenate["FroniusModbusInverter", P], Awaitable[T]],
+]:
+    """Resolve the method's component and recover from register map shifts.
 
-    The register map shifts when the data type setting is changed on the
-    device; a component's header check then raises, so re-discover
-    (rebuilding the components) and retry once.
+    The component named by ``attr`` is passed as the method's first argument.
+    A missing model gets one re-discovery before failing - it may have
+    appeared since. A :class:`SunSpecError` from the method means the
+    register map shifted (the header check failed), so re-discover,
+    rebuilding the components, and retry once.
     """
 
-    @functools.wraps(method)
-    async def wrapper(
-        self: FroniusModbusInverter, /, *args: P.args, **kwargs: P.kwargs
-    ) -> T:
-        try:
-            return await method(self, *args, **kwargs)
-        except SunSpecError:
-            await self.discover()
-            return await method(self, *args, **kwargs)
+    def decorator(
+        method: Callable[Concatenate[FroniusModbusInverter, Any, P], Awaitable[T]],
+    ) -> Callable[Concatenate[FroniusModbusInverter, P], Awaitable[T]]:
+        @functools.wraps(method)
+        async def wrapper(
+            self: FroniusModbusInverter, /, *args: P.args, **kwargs: P.kwargs
+        ) -> T:
+            if getattr(self, attr) is None:
+                await self.discover()
+            if (component := getattr(self, attr)) is None:
+                raise SunSpecError(f"{attr.title()} model not available")
+            try:
+                return await method(self, component, *args, **kwargs)
+            except SunSpecError:
+                await self.discover()
+                if (component := getattr(self, attr)) is None:
+                    raise
+                return await method(self, component, *args, **kwargs)
 
-    return wrapper
+        return wrapper
+
+    return decorator
 
 
 class FroniusModbusInverter:
@@ -150,74 +166,61 @@ class FroniusModbusInverter:
         """Return the discovered SunSpec models."""
         return self._models
 
-    @_rediscovers_on_shift
-    async def read_common(self) -> CommonModel:
+    @_uses_model("common")
+    async def read_common(self, common: CommonModel) -> CommonModel:
         """Read manufacturer, model, version and serial from the Common model."""
-        if (common := self.common) is None:
-            raise SunSpecError("Common model not available")
         await common.async_update()
         return common
 
-    @_rediscovers_on_shift
-    async def read_inverter(self) -> InverterModel:
+    @_uses_model("inverter")
+    async def read_inverter(self, inverter: InverterModel) -> InverterModel:
         """Read AC/DC values, energy and state from the inverter model."""
-        if (inverter := self.inverter) is None:
-            raise SunSpecError("Inverter model not available")
         await inverter.async_update()
         return inverter
 
-    @_rediscovers_on_shift
-    async def read_mppt(self) -> MpptModel:
+    @_uses_model("mppt")
+    async def read_mppt(self, mppt: MpptModel) -> MpptModel:
         """Read per-module DC values from the Multiple MPPT model."""
-        if (mppt := self.mppt) is None:
-            raise SunSpecError("Multiple MPPT model not available")
         await mppt.async_update()
         return mppt
 
-    @_rediscovers_on_shift
-    async def read_storage(self) -> StorageModel:
+    @_uses_model("storage")
+    async def read_storage(self, storage: StorageModel) -> StorageModel:
         """Read battery state and control setpoints from the storage model."""
-        if (storage := self.storage) is None:
-            raise SunSpecError("Storage model not available")
         await storage.async_update()
         return storage
 
-    @_rediscovers_on_shift
-    async def read_controls(self) -> ControlsModel:
+    @_uses_model("controls")
+    async def read_controls(self, controls: ControlsModel) -> ControlsModel:
         """Read the output power limit state from the Immediate Controls model."""
-        if (controls := self.controls) is None:
-            raise SunSpecError("Immediate Controls model not available")
         await controls.async_update()
         return controls
 
-    @_rediscovers_on_shift
-    async def probe_write_access(self) -> bool:
+    @_uses_model("controls")
+    async def probe_write_access(self, controls: ControlsModel) -> bool:
         """Check whether the device accepts Modbus writes."""
-        if (controls := self.controls) is None:
-            raise SunSpecError("Immediate Controls model not available")
         return await controls.probe_write_access()
 
-    @_rediscovers_on_shift
-    async def set_power_limit(self, percent: float, *, revert_seconds: int = 0) -> None:
+    @_uses_model("controls")
+    async def set_power_limit(
+        self, controls: ControlsModel, percent: float, *, revert_seconds: int = 0
+    ) -> None:
         """Limit output power to ``percent`` of the nominal power WMax.
 
         ``revert_seconds`` > 0 auto-reverts the limit if it isn't refreshed -
         recommended as a safety net; 0 keeps it active until cleared.
         """
-        if (controls := self.controls) is None:
-            raise SunSpecError("Immediate Controls model not available")
         await controls.set_power_limit(percent, revert_seconds)
 
-    @_rediscovers_on_shift
-    async def clear_power_limit(self) -> None:
+    @_uses_model("controls")
+    async def clear_power_limit(self, controls: ControlsModel) -> None:
         """Disable the output power limit."""
-        if (controls := self.controls) is None:
-            raise SunSpecError("Immediate Controls model not available")
         await controls.clear_power_limit()
 
-    @_rediscovers_on_shift
+    @_uses_model("storage")
     async def set_storage_limits(
         self,
+        storage: StorageModel,
         *,
         charge: float | None = None,
         discharge: float | None = None,
@@ -229,20 +232,14 @@ class FroniusModbusInverter:
         charging / discharging. ``revert_seconds`` > 0 auto-reverts the limits
         if they aren't refreshed; support varies by device generation.
         """
-        if (storage := self.storage) is None:
-            raise SunSpecError("Storage model not available")
         await storage.set_limits(charge, discharge, revert_seconds)
 
-    @_rediscovers_on_shift
-    async def set_minimum_reserve(self, percent: float) -> None:
+    @_uses_model("storage")
+    async def set_minimum_reserve(self, storage: StorageModel, percent: float) -> None:
         """Set the minimum state of charge reserve in percent."""
-        if (storage := self.storage) is None:
-            raise SunSpecError("Storage model not available")
         await storage.set_minimum_reserve(percent)
 
-    @_rediscovers_on_shift
-    async def set_grid_charging(self, enabled: bool) -> None:
+    @_uses_model("storage")
+    async def set_grid_charging(self, storage: StorageModel, enabled: bool) -> None:
         """Allow or prevent charging the storage from the grid."""
-        if (storage := self.storage) is None:
-            raise SunSpecError("Storage model not available")
         await storage.set_grid_charging(enabled)
