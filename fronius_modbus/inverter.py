@@ -9,7 +9,7 @@ from .common import Common
 from .controls import Controls
 from .inverter_model import Inverter, InverterFloat, InverterInteger
 from .mppt import Mppt
-from .storage import WCHA_MAX, Storage
+from .storage import Storage
 from .sunspec import (
     COMMON_MODEL_ID,
     IMMEDIATE_CONTROLS_MODEL_ID,
@@ -86,13 +86,6 @@ class FroniusModbusInverter:
     async def discover(self) -> None:
         """Discover the SunSpec models and build their components."""
         self._models = await discover_models(self._unit)
-        model_ids = {model.model_id for model in self._models}
-        if model_ids & INVERTER_MODELS_FLOAT:
-            self.float_mode = True
-        elif model_ids & INVERTER_MODELS_INT_SF:
-            self.float_mode = False
-        else:
-            self.float_mode = None
         has_storage = (
             self._has_storage_override
             if self._has_storage_override is not None
@@ -110,6 +103,9 @@ class FroniusModbusInverter:
             self.inverter = InverterFloat(unit, inverter)
         else:
             self.inverter = InverterInteger(unit, inverter)
+        self.float_mode = (
+            isinstance(self.inverter, InverterFloat) if self.inverter else None
+        )
         mppt = self._find_model(MULTI_MPPT_MODEL_ID)
         self.mppt = Mppt(unit, mppt, has_storage) if mppt else None
         storage = self._find_model(STORAGE_MODEL_ID)
@@ -156,11 +152,10 @@ class FroniusModbusInverter:
         storage_model = self._find_model(STORAGE_MODEL_ID)
         if storage_model is None:
             return False
-        # WChaMax reads 0 when a storage-capable inverter has no storage
-        # connected, otherwise the reference value for charge/discharge limits
+        # WChaMax, the model's first data register: reads 0 when a
+        # storage-capable inverter has no storage connected, otherwise the
+        # reference value for charge/discharge limits
         wcha_max = (
-            await self._unit.read_holding_registers(
-                storage_model.address + 2 + WCHA_MAX, 1
-            )
+            await self._unit.read_holding_registers(storage_model.address + 2, 1)
         )[0]
         return wcha_max not in (0, _WCHA_MAX_NOT_IMPLEMENTED)

@@ -43,14 +43,13 @@ class MpptModule(Component):
     )
 
 
-# module count N: unsigned with the uint16 not-implemented sentinel
-_module_count: NumberField[int] = NumberField(8, signed=False, nan=0xFFFF)
-
-
 class Mppt(SunSpecComponent):
     """The Multiple MPPT model: per-module DC values, roles classified."""
 
-    modules = repeating_group(_module_count, MpptModule, stride=20)
+    # count register N: unsigned with the uint16 not-implemented sentinel
+    modules = repeating_group(
+        NumberField(8, signed=False, nan=0xFFFF), MpptModule, stride=20
+    )
 
     def __init__(
         self, unit: ModbusUnit, model: SunSpecModel, has_storage: bool

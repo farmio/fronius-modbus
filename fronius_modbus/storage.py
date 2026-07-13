@@ -20,9 +20,6 @@ from modbus_connection.model.fields import NumberField
 
 from .sunspec import SunSpecComponent, SunSpecError
 
-# WChaMax data offset, used by the storage detection during discovery.
-WCHA_MAX: Final = 0
-
 # StorCtl_Mod bits activating the charge / discharge limits
 _MODE_CHARGE_LIMIT: Final = 0b01
 _MODE_DISCHARGE_LIMIT: Final = 0b10
@@ -134,4 +131,4 @@ class Storage(SunSpecComponent):
         setting - enabling it here only takes effect if allowed there too.
         """
         await self.async_update()
-        await self.write("grid_charging", 1 if enabled else 0)
+        await self.write("grid_charging", enabled)
