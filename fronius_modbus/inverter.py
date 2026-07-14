@@ -17,10 +17,11 @@ from .sunspec import (
     INVERTER_MODELS_INT_SF,
     MULTI_MPPT_MODEL_ID,
     STORAGE_MODEL_ID,
+    SUNSPEC_BASE_ADDRESS,
     SunSpecComponent,
     SunSpecError,
     SunSpecModel,
-    discover_models,
+    scan,
 )
 
 # GEN24 and Tauro inverters always respond on unit ID 1
@@ -73,7 +74,7 @@ class FroniusModbusInverter:
         """
         self._unit = unit
         self._has_storage_override = has_storage
-        self._models: list[SunSpecModel] = []
+        self._models: dict[int, list[SunSpecModel]] = {}
         self._group: ComponentGroup | None = None
         self.common: Common | None = None
         self.inverter: Inverter | None = None
@@ -85,7 +86,7 @@ class FroniusModbusInverter:
 
     async def discover(self) -> None:
         """Discover the SunSpec models and build their components."""
-        self._models = await discover_models(self._unit)
+        self._models = await scan(self._unit, SUNSPEC_BASE_ADDRESS)
         has_storage = (
             self._has_storage_override
             if self._has_storage_override is not None
@@ -139,12 +140,20 @@ class FroniusModbusInverter:
 
     @property
     def model_chain(self) -> list[SunSpecModel]:
-        """Return the discovered SunSpec models."""
-        return self._models
+        """Return the discovered SunSpec models in chain order."""
+        return sorted(
+            (model for models in self._models.values() for model in models),
+            key=lambda model: model.address,
+        )
 
     def _find_model(self, *model_ids: int) -> SunSpecModel | None:
         return next(
-            (model for model in self._models if model.model_id in model_ids), None
+            (
+                self._models[model_id][0]
+                for model_id in model_ids
+                if model_id in self._models
+            ),
+            None,
         )
 
     async def _detect_storage(self) -> bool:
