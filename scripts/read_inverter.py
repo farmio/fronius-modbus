@@ -64,12 +64,18 @@ async def run_write_commands(
                 args.set_power_limit, revert_seconds=args.revert
             )
             await controls.async_update()
-            print(f"\nPower limit set: {controls}")
+            print(
+                f"\nPower limit set: {controls.power_limit} %"
+                f" (enabled: {controls.enabled}, revert: {controls.revert_seconds} s)"
+            )
         elif args.clear_power_limit:
             controls = _controls(inverter)
             await controls.clear_power_limit()
             await controls.async_update()
-            print(f"\nPower limit cleared: {controls}")
+            print(
+                f"\nPower limit cleared: {controls.power_limit} %"
+                f" (enabled: {controls.enabled}, revert: {controls.revert_seconds} s)"
+            )
 
         if args.set_charge_limit is not None or args.set_discharge_limit is not None:
             storage = _storage(inverter)
@@ -79,24 +85,34 @@ async def run_write_commands(
                 revert_seconds=args.revert,
             )
             await storage.async_update()
-            print(f"\nStorage limits set: {storage}")
+            print(
+                f"\nStorage limits set: charge {storage.charge_limit} %"
+                f" (enabled: {storage.charge_limit_enabled}),"
+                f" discharge {storage.discharge_limit} %"
+                f" (enabled: {storage.discharge_limit_enabled})"
+            )
         elif args.clear_storage_limits:
             storage = _storage(inverter)
             await storage.set_limits()
             await storage.async_update()
-            print(f"\nStorage limits cleared: {storage}")
+            print(
+                f"\nStorage limits cleared: charge {storage.charge_limit} %"
+                f" (enabled: {storage.charge_limit_enabled}),"
+                f" discharge {storage.discharge_limit} %"
+                f" (enabled: {storage.discharge_limit_enabled})"
+            )
 
         if args.set_reserve is not None:
             storage = _storage(inverter)
             await storage.set_minimum_reserve(args.set_reserve)
             await storage.async_update()
-            print(f"\nMinimum reserve set: {storage}")
+            print(f"\nMinimum reserve set: {storage.minimum_reserve} %")
 
         if args.set_grid_charging is not None:
             storage = _storage(inverter)
             await storage.set_grid_charging(args.set_grid_charging == "on")
             await storage.async_update()
-            print(f"\nGrid charging set: {storage}")
+            print(f"\nGrid charging set: {storage.grid_charging}")
     except (ModbusError, SunSpecError) as err:
         print(f"\nWrite failed: {err}")
         print('Is "inverter control via Modbus" enabled on the web interface?')
