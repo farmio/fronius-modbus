@@ -192,7 +192,8 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
                 f"  DC totals:       {ac_dc.dc_current} A / {ac_dc.dc_voltage} V"
                 f" / {ac_dc.dc_power} W"
             )
-            print(f"  operating state: {ac_dc.operating_state}")
+            state = ac_dc.operating_state
+            print(f"  operating state: {state.name if state is not None else None}")
             print(f"  vendor state:    {ac_dc.vendor_operating_state}")
             print(
                 f"  events:          {ac_dc.events:#010x}"
@@ -203,7 +204,11 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
         if (storage := inverter.storage) is not None:
             print("\nStorage:")
             print(f"  state of charge:        {storage.state_of_charge} %")
-            print(f"  state:                  {storage.state}")
+            charge_state = storage.state
+            print(
+                "  state:                  "
+                f"{charge_state.name if charge_state is not None else None}"
+            )
             print(f"  charge reference power: {storage.charge_reference_power} W")
             print(f"  minimum reserve:        {storage.minimum_reserve} %")
             print(

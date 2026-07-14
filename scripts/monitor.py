@@ -437,7 +437,8 @@ class MonitorApp(App[None]):
             )
             table.add_row("Power factor", _fmt(data.power_factor, "%"))
             table.add_row("DC power", _fmt(data.dc_power, "W"))
-            table.add_row("Operating state", str(data.operating_state or "—"))
+            state = data.operating_state
+            table.add_row("Operating state", state.name if state is not None else "—")
             self._panel("inverter", "Inverter", table)
 
         if (mppt := inverter.mppt) is not None:
@@ -462,7 +463,10 @@ class MonitorApp(App[None]):
         if (storage := inverter.storage) is not None:
             table = Table.grid(padding=(0, 1))
             table.add_row("State of charge", _fmt(storage.state_of_charge, "%"))
-            table.add_row("State", str(storage.state or "—"))
+            charge_state = storage.state
+            table.add_row(
+                "State", charge_state.name if charge_state is not None else "—"
+            )
             table.add_row(
                 "Charge ref. power", _fmt(storage.charge_reference_power, "W")
             )

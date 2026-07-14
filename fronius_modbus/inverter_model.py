@@ -9,8 +9,7 @@ not-implemented. Register addresses per the SunSpec model definitions,
 relative to the model start.
 """
 
-from enum import StrEnum
-from typing import Final
+from enum import IntEnum
 
 from modbus_connection.model import sunspec as sunspec_fields
 from modbus_connection.model.fields import NumberField
@@ -18,29 +17,17 @@ from modbus_connection.model.fields import NumberField
 from .sunspec import SunSpecComponent
 
 
-class OperatingState(StrEnum):
+class OperatingState(IntEnum):
     """SunSpec inverter operating state (St)."""
 
-    OFF = "off"
-    SLEEPING = "sleeping"
-    STARTING = "starting"
-    MPPT = "mppt"
-    THROTTLED = "throttled"
-    SHUTTING_DOWN = "shutting_down"
-    FAULT = "fault"
-    STANDBY = "standby"
-
-
-_OPERATING_STATES: Final = {
-    1: OperatingState.OFF,
-    2: OperatingState.SLEEPING,
-    3: OperatingState.STARTING,
-    4: OperatingState.MPPT,
-    5: OperatingState.THROTTLED,
-    6: OperatingState.SHUTTING_DOWN,
-    7: OperatingState.FAULT,
-    8: OperatingState.STANDBY,
-}
+    OFF = 1
+    SLEEPING = 2
+    STARTING = 3
+    MPPT = 4
+    THROTTLED = 5
+    SHUTTING_DOWN = 6
+    FAULT = 7
+    STANDBY = 8
 
 
 class InverterFloat(SunSpecComponent):
@@ -65,9 +52,7 @@ class InverterFloat(SunSpecComponent):
     dc_current = sunspec_fields.float32(34, unit="A")
     dc_voltage = sunspec_fields.float32(36, unit="V")
     dc_power = sunspec_fields.float32(38, unit="W")
-    operating_state: NumberField[OperatingState] = NumberField(
-        48, signed=False, nan=0xFFFF, convert=_OPERATING_STATES
-    )
+    operating_state = sunspec_fields.enum16(48, OperatingState)
     vendor_operating_state = sunspec_fields.enum16(49)
     events = sunspec_fields.bitfield32(50)  # Evt1
 
@@ -97,9 +82,7 @@ class InverterInteger(SunSpecComponent):
     dc_current = sunspec_fields.uint16(27, scale_register=28, unit="A")
     dc_voltage = sunspec_fields.uint16(29, scale_register=30, unit="V")
     dc_power = sunspec_fields.int16(31, scale_register=32, unit="W")
-    operating_state: NumberField[OperatingState] = NumberField(
-        38, signed=False, nan=0xFFFF, convert=_OPERATING_STATES
-    )
+    operating_state = sunspec_fields.enum16(38, OperatingState)
     vendor_operating_state = sunspec_fields.enum16(39)
     events = sunspec_fields.bitfield32(40)  # Evt1
 

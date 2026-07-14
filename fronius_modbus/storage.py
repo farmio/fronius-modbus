@@ -12,7 +12,7 @@ separate unscaled fields at the same addresses. Register addresses relative
 to the model start, per the SunSpec model 124 definition.
 """
 
-from enum import StrEnum
+from enum import IntEnum
 from typing import Final
 
 from modbus_connection.model import sunspec as sunspec_fields
@@ -25,27 +25,16 @@ _MODE_CHARGE_LIMIT: Final = 0b01
 _MODE_DISCHARGE_LIMIT: Final = 0b10
 
 
-class StorageState(StrEnum):
+class StorageState(IntEnum):
     """SunSpec storage charge status (ChaSt)."""
 
-    OFF = "off"
-    EMPTY = "empty"
-    DISCHARGING = "discharging"
-    CHARGING = "charging"
-    FULL = "full"
-    HOLDING = "holding"
-    TESTING = "testing"
-
-
-_STORAGE_STATES: Final = {
-    1: StorageState.OFF,
-    2: StorageState.EMPTY,
-    3: StorageState.DISCHARGING,
-    4: StorageState.CHARGING,
-    5: StorageState.FULL,
-    6: StorageState.HOLDING,
-    7: StorageState.TESTING,
-}
+    OFF = 1
+    EMPTY = 2
+    DISCHARGING = 3
+    CHARGING = 4
+    FULL = 5
+    HOLDING = 6
+    TESTING = 7
 
 
 class Storage(SunSpecComponent):
@@ -53,9 +42,7 @@ class Storage(SunSpecComponent):
 
     charge_reference_power = sunspec_fields.uint16(2, scale_register=18, unit="W")
     state_of_charge = sunspec_fields.uint16(8, scale_register=22, unit="%")
-    state: NumberField[StorageState] = NumberField(
-        11, signed=False, nan=0xFFFF, convert=_STORAGE_STATES
-    )
+    state = sunspec_fields.enum16(11, StorageState)
     minimum_reserve = sunspec_fields.uint16(7, scale_register=21, unit="%")
     minimum_reserve_raw = sunspec_fields.uint16(7, writable=True)
     minimum_reserve_sf = sunspec_fields.sunssf(21)
