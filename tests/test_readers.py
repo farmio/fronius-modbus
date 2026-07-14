@@ -7,7 +7,7 @@ from fronius_modbus import (
     FroniusModbusInverter,
     OperatingState,
     StorageState,
-    SunSpecError,
+    SunSpecMapShiftError,
 )
 from fronius_modbus.testing import InverterModelSpec, build_sunspec_map
 
@@ -196,7 +196,7 @@ async def test_inverter_data_after_data_type_change(
     mock_modbus_unit.holding.update(
         build_sunspec_map([], float_mode=False, inverter=INVERTER_SPEC)
     )
-    with pytest.raises(SunSpecError):
+    with pytest.raises(SunSpecMapShiftError):
         await inverter.async_update()
 
     await inverter.discover()

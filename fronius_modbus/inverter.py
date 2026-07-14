@@ -59,7 +59,7 @@ class FroniusModbusInverter:
 
     The register map shifts when the data type setting is changed on the
     device: every component verifies its model header on each update and
-    raises :class:`SunSpecError` on a mismatch. Recover by calling
+    raises :class:`SunSpecMapShiftError` on a mismatch. Recover by calling
     :meth:`discover` again, which rebuilds the components at the new
     addresses - so hold on to this object, not to a component.
     """

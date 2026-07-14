@@ -5,7 +5,12 @@ from unittest.mock import patch
 import pytest
 from modbus_connection.mock import MockModbusUnit
 
-from fronius_modbus import FroniusModbusInverter, SunSpecError, datamanager_unit_id
+from fronius_modbus import (
+    FroniusModbusInverter,
+    SunSpecError,
+    SunSpecMapShiftError,
+    datamanager_unit_id,
+)
 from fronius_modbus.sunspec import MULTI_MPPT_MODEL_ID
 from fronius_modbus.testing import MpptModuleSpec, build_sunspec_map
 
@@ -103,7 +108,7 @@ async def test_rediscovery_on_register_map_shift(
     # switching to int+SF shifts the model 160 address
     mock_modbus_unit.holding.clear()
     mock_modbus_unit.holding.update(build_sunspec_map(MODULES, float_mode=False))
-    with pytest.raises(SunSpecError):
+    with pytest.raises(SunSpecMapShiftError):
         await inverter.async_update()
 
     await inverter.discover()

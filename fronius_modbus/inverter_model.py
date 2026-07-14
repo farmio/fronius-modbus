@@ -12,7 +12,6 @@ relative to the model start.
 from enum import IntEnum
 
 from modbus_connection.model import sunspec as sunspec_fields
-from modbus_connection.model.fields import NumberField
 
 from .sunspec import SunSpecComponent
 
@@ -75,10 +74,7 @@ class InverterInteger(SunSpecComponent):
     apparent_power = sunspec_fields.int16(18, scale_register=19, unit="VA")
     reactive_power = sunspec_fields.int16(20, scale_register=21, unit="var")
     power_factor = sunspec_fields.int16(22, scale_register=23, unit="%")
-    # a scaled acc32 accumulator: raw 0 means "not accumulated"
-    energy_total: NumberField[float] = NumberField(
-        24, count=2, signed=False, nan=0, scale_register=26, unit="Wh"
-    )
+    energy_total = sunspec_fields.acc32(24, scale_register=26, unit="Wh")
     dc_current = sunspec_fields.uint16(27, scale_register=28, unit="A")
     dc_voltage = sunspec_fields.uint16(29, scale_register=30, unit="V")
     dc_power = sunspec_fields.int16(31, scale_register=32, unit="W")

@@ -5,6 +5,7 @@ from typing import Final
 from modbus_connection.model.sunspec import (
     SunSpecComponent,
     SunSpecError,
+    SunSpecMapShiftError,
     SunSpecModel,
     scan,
 )
@@ -12,6 +13,7 @@ from modbus_connection.model.sunspec import (
 __all__ = [
     "SunSpecComponent",
     "SunSpecError",
+    "SunSpecMapShiftError",
     "SunSpecModel",
     "scan",
 ]

@@ -15,7 +15,7 @@ from .inverter_model import (
 )
 from .mppt import ModuleRole, Mppt, MpptModule
 from .storage import Storage, StorageState
-from .sunspec import SunSpecError, SunSpecModel
+from .sunspec import SunSpecError, SunSpecMapShiftError, SunSpecModel
 
 __all__ = [
     "GEN24_UNIT_ID",
@@ -32,6 +32,7 @@ __all__ = [
     "Storage",
     "StorageState",
     "SunSpecError",
+    "SunSpecMapShiftError",
     "SunSpecModel",
     "datamanager_unit_id",
 ]

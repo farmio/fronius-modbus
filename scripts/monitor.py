@@ -49,6 +49,7 @@ from fronius_modbus import (
     ModuleRole,
     Storage,
     SunSpecError,
+    SunSpecMapShiftError,
 )
 
 
@@ -406,6 +407,13 @@ class MonitorApp(App[None]):
         async with self._lock:
             try:
                 await self._refresh(self._inverter)
+            except SunSpecMapShiftError as err:
+                self._log(f"[yellow]Register map shifted:[/yellow] {err}")
+                self._log("Re-discovering the SunSpec models")
+                try:
+                    await self._inverter.discover()
+                except (ModbusError, SunSpecError):
+                    await self._reconnect()
             except (ModbusError, SunSpecError) as err:
                 self._log(f"[red]Read failed:[/red] {err} — reconnecting")
                 await self._reconnect()

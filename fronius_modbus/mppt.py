@@ -37,10 +37,7 @@ class MpptModule(Component):
     current = sunspec_fields.uint16(19, scale_register=2, unit="A")
     voltage = sunspec_fields.uint16(20, scale_register=3, unit="V")
     power = sunspec_fields.uint16(21, scale_register=4, unit="W")
-    # a scaled acc32 accumulator: raw 0 means "not accumulated"
-    energy: NumberField[float] = NumberField(
-        22, count=2, signed=False, nan=0, scale_register=5, unit="Wh"
-    )
+    energy = sunspec_fields.acc32(22, scale_register=5, unit="Wh")
 
 
 class Mppt(SunSpecComponent):

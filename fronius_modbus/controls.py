@@ -4,17 +4,16 @@ Writes require "inverter control via Modbus" to be enabled on the device web
 interface, and may be overridden by higher-priority control sources (IO
 control, dynamic power reduction).
 
-The framework doesn't write dynamically-scaled fields, so setters read the
-scale factor from the same component update and write raw values through
-separate unscaled fields at the same addresses. Register addresses relative
-to the model start, per the SunSpec model 123 definition.
+Setters refresh the model first, so the header check catches a shifted
+register map before anything is written. Register addresses relative to the
+model start, per the SunSpec model 123 definition.
 """
 
 from modbus_connection import ModbusExceptionError
 from modbus_connection.model import sunspec as sunspec_fields
 from modbus_connection.model.fields import NumberField
 
-from .sunspec import SunSpecComponent, SunSpecError
+from .sunspec import SunSpecComponent
 
 
 class Controls(SunSpecComponent):
@@ -22,13 +21,11 @@ class Controls(SunSpecComponent):
 
     # harmless read-write register used to probe write access
     connect_window = sunspec_fields.uint16(2, writable=True)
-    power_limit = sunspec_fields.uint16(5, scale_register=23, unit="%")
-    power_limit_raw = sunspec_fields.uint16(5, writable=True)
+    power_limit = sunspec_fields.uint16(5, scale_register=23, unit="%", writable=True)
     revert_seconds = sunspec_fields.uint16(7, writable=True)
     enabled: NumberField[bool] = NumberField(
         9, signed=False, nan=0xFFFF, convert=bool, writable=True
     )
-    power_limit_sf = sunspec_fields.sunssf(23)
 
     async def set_power_limit(self, percent: float, *, revert_seconds: int = 0) -> None:
         """Limit output power to ``percent`` of the nominal power and enable.
@@ -41,10 +38,8 @@ class Controls(SunSpecComponent):
         if not 0 <= revert_seconds <= 0xFFFF:
             raise ValueError(f"revert_seconds out of range: {revert_seconds}")
         await self.async_update()
-        if (sf := self.power_limit_sf) is None:
-            raise SunSpecError("WMaxLimPct scale factor not implemented")
         await self.write("revert_seconds", revert_seconds)
-        await self.write("power_limit_raw", round(percent / 10.0**sf))
+        await self.write("power_limit", percent)
         await self.write("enabled", 1)
 
     async def clear_power_limit(self) -> None:

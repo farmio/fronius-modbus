@@ -4,7 +4,12 @@ import pytest
 from modbus_connection import ModbusExceptionError
 from modbus_connection.mock import MockModbusUnit
 
-from fronius_modbus import Controls, FroniusModbusInverter, Storage, SunSpecError
+from fronius_modbus import (
+    Controls,
+    FroniusModbusInverter,
+    Storage,
+    SunSpecMapShiftError,
+)
 from fronius_modbus.sunspec import (
     IMMEDIATE_CONTROLS_MODEL_ID,
     STORAGE_MODEL_ID,
@@ -198,7 +203,7 @@ async def test_write_after_register_map_shift(
     mock_modbus_unit.holding.clear()
     mock_modbus_unit.holding.update(build_sunspec_map([], float_mode=False))
 
-    with pytest.raises(SunSpecError):
+    with pytest.raises(SunSpecMapShiftError):
         await _controls(inverter).set_power_limit(80.0)
 
     await inverter.discover()

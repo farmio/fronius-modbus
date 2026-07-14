@@ -6,10 +6,9 @@ interface. Setpoint semantics per the Fronius documentation: ``InWRte`` /
 ``OutWRte`` limit charge/discharge rates in percent of ``WChaMax``; negative
 values force charging/discharging (Solar.web shows "Forced Recharge").
 
-The framework doesn't write dynamically-scaled fields, so setters read the
-scale factor from the same component update and write raw values through
-separate unscaled fields at the same addresses. Register addresses relative
-to the model start, per the SunSpec model 124 definition.
+Setters refresh the model first, so the header check catches a shifted
+register map before anything is written. Register addresses relative to the
+model start, per the SunSpec model 124 definition.
 """
 
 from enum import IntEnum
@@ -18,7 +17,7 @@ from typing import Final
 from modbus_connection.model import sunspec as sunspec_fields
 from modbus_connection.model.fields import NumberField
 
-from .sunspec import SunSpecComponent, SunSpecError
+from .sunspec import SunSpecComponent
 
 # StorCtl_Mod bits activating the charge / discharge limits
 _MODE_CHARGE_LIMIT: Final = 0b01
@@ -43,14 +42,13 @@ class Storage(SunSpecComponent):
     charge_reference_power = sunspec_fields.uint16(2, scale_register=18, unit="W")
     state_of_charge = sunspec_fields.uint16(8, scale_register=22, unit="%")
     state = sunspec_fields.enum16(11, StorageState)
-    minimum_reserve = sunspec_fields.uint16(7, scale_register=21, unit="%")
-    minimum_reserve_raw = sunspec_fields.uint16(7, writable=True)
-    minimum_reserve_sf = sunspec_fields.sunssf(21)
-    charge_limit = sunspec_fields.int16(13, scale_register=25, unit="%")
-    charge_limit_raw = sunspec_fields.int16(13, writable=True)
-    discharge_limit = sunspec_fields.int16(12, scale_register=25, unit="%")
-    discharge_limit_raw = sunspec_fields.int16(12, writable=True)
-    limit_sf = sunspec_fields.sunssf(25)
+    minimum_reserve = sunspec_fields.uint16(
+        7, scale_register=21, unit="%", writable=True
+    )
+    charge_limit = sunspec_fields.int16(13, scale_register=25, unit="%", writable=True)
+    discharge_limit = sunspec_fields.int16(
+        12, scale_register=25, unit="%", writable=True
+    )
     control_mode = sunspec_fields.bitfield16(5, writable=True)
     revert_seconds = sunspec_fields.uint16(15, writable=True)
     grid_charging: NumberField[bool] = NumberField(
@@ -89,14 +87,12 @@ class Storage(SunSpecComponent):
             if limit is not None and not -100 <= limit <= 100:
                 raise ValueError(f"limit out of range -100..100: {limit}")
         await self.async_update()
-        if (sf := self.limit_sf) is None:
-            raise SunSpecError("InOutWRte scale factor not implemented")
         if revert_seconds:
             await self.write("revert_seconds", revert_seconds)
         if charge is not None:
-            await self.write("charge_limit_raw", round(charge / 10.0**sf))
+            await self.write("charge_limit", charge)
         if discharge is not None:
-            await self.write("discharge_limit_raw", round(discharge / 10.0**sf))
+            await self.write("discharge_limit", discharge)
         mode = (_MODE_CHARGE_LIMIT if charge is not None else 0) | (
             _MODE_DISCHARGE_LIMIT if discharge is not None else 0
         )
@@ -107,9 +103,7 @@ class Storage(SunSpecComponent):
         if not 0 <= percent <= 100:
             raise ValueError(f"minimum reserve out of range 0-100: {percent}")
         await self.async_update()
-        if (sf := self.minimum_reserve_sf) is None:
-            raise SunSpecError("MinRsvPct scale factor not implemented")
-        await self.write("minimum_reserve_raw", round(percent / 10.0**sf))
+        await self.write("minimum_reserve", percent)
 
     async def set_grid_charging(self, enabled: bool) -> None:
         """Allow or prevent charging the storage from the grid.
