@@ -43,7 +43,27 @@ from textual.widgets import (
 )
 from textual_plotext import PlotextPlot
 
-from fronius_modbus import FroniusModbusInverter, ModuleRole, SunSpecError
+from fronius_modbus import (
+    Controls,
+    FroniusModbusInverter,
+    ModuleRole,
+    Storage,
+    SunSpecError,
+    SunSpecMapShiftError,
+)
+
+
+def _controls(inverter: FroniusModbusInverter) -> Controls:
+    if inverter.controls is None:
+        raise SunSpecError("Immediate Controls model not available")
+    return inverter.controls
+
+
+def _storage(inverter: FroniusModbusInverter) -> Storage:
+    if inverter.storage is None:
+        raise SunSpecError("Storage model not available")
+    return inverter.storage
+
 
 type Connector = Callable[[str, int], Awaitable[ModbusConnection]]
 
@@ -205,7 +225,7 @@ class ControlsScreen(ModalScreen[None]):
                 self._status(
                     await monitor.run_write(
                         f"Set power limit {percent} %",
-                        inverter.set_power_limit(
+                        lambda: _controls(inverter).set_power_limit(
                             percent, revert_seconds=self._revert("power_revert")
                         ),
                     )
@@ -213,14 +233,15 @@ class ControlsScreen(ModalScreen[None]):
             case "clear_power":
                 self._status(
                     await monitor.run_write(
-                        "Clear power limit", inverter.clear_power_limit()
+                        "Clear power limit",
+                        lambda: _controls(inverter).clear_power_limit(),
                     )
                 )
             case "set_storage":
                 self._status(
                     await monitor.run_write(
                         "Set storage limits",
-                        inverter.set_storage_limits(
+                        lambda: _storage(inverter).set_limits(
                             charge=self._input("charge_input"),
                             discharge=self._input("discharge_input"),
                             revert_seconds=self._revert("storage_revert"),
@@ -230,7 +251,8 @@ class ControlsScreen(ModalScreen[None]):
             case "clear_storage":
                 self._status(
                     await monitor.run_write(
-                        "Clear storage limits", inverter.set_storage_limits()
+                        "Clear storage limits",
+                        lambda: _storage(inverter).set_limits(),
                     )
                 )
             case "set_reserve":
@@ -241,19 +263,21 @@ class ControlsScreen(ModalScreen[None]):
                 self._status(
                     await monitor.run_write(
                         f"Set minimum reserve {reserve} %",
-                        inverter.set_minimum_reserve(reserve),
+                        lambda: _storage(inverter).set_minimum_reserve(reserve),
                     )
                 )
             case "grid_on":
                 self._status(
                     await monitor.run_write(
-                        "Enable grid charging", inverter.set_grid_charging(True)
+                        "Enable grid charging",
+                        lambda: _storage(inverter).set_grid_charging(True),
                     )
                 )
             case "grid_off":
                 self._status(
                     await monitor.run_write(
-                        "Disable grid charging", inverter.set_grid_charging(False)
+                        "Disable grid charging",
+                        lambda: _storage(inverter).set_grid_charging(False),
                     )
                 )
             case "probe":
@@ -383,11 +407,19 @@ class MonitorApp(App[None]):
         async with self._lock:
             try:
                 await self._refresh(self._inverter)
+            except SunSpecMapShiftError as err:
+                self._log(f"[yellow]Register map shifted:[/yellow] {err}")
+                self._log("Re-discovering the SunSpec models")
+                try:
+                    await self._inverter.discover()
+                except (ModbusError, SunSpecError):
+                    await self._reconnect()
             except (ModbusError, SunSpecError) as err:
                 self._log(f"[red]Read failed:[/red] {err} — reconnecting")
                 await self._reconnect()
 
     async def _refresh(self, inverter: FroniusModbusInverter) -> None:
+        await inverter.async_update()
         now = datetime.now().strftime("%H:%M:%S")
         data_type = {True: "float", False: "int+SF", None: "unknown"}
         connection = Table.grid(padding=(0, 1))
@@ -399,8 +431,7 @@ class MonitorApp(App[None]):
 
         sample: dict[str, float | None] = {}
 
-        if inverter.has_inverter_model:
-            data = await inverter.read_inverter()
+        if (data := inverter.inverter) is not None:
             sample["ac_power"] = data.ac_power
             table = Table.grid(padding=(0, 1))
             table.add_row("AC power", _fmt(data.ac_power, "W"))
@@ -414,32 +445,36 @@ class MonitorApp(App[None]):
             )
             table.add_row("Power factor", _fmt(data.power_factor, "%"))
             table.add_row("DC power", _fmt(data.dc_power, "W"))
-            table.add_row("Operating state", str(data.operating_state or "—"))
+            state = data.operating_state
+            table.add_row("Operating state", state.name if state is not None else "—")
             self._panel("inverter", "Inverter", table)
 
-        if inverter.has_mppt:
-            mppt = await inverter.read_mppt()
+        if (mppt := inverter.mppt) is not None:
             table = Table(expand=True)
             for column in ("Module", "Role", "Current", "Voltage", "Power", "Energy"):
                 table.add_column(column)
-            for module in mppt.modules:
-                sample[f"mod_{module.index}"] = module.power
+            for index, (module, role) in enumerate(
+                zip(mppt.modules, mppt.module_roles, strict=True), start=1
+            ):
+                sample[f"mod_{index}"] = module.power
                 table.add_row(
-                    f"{module.index} {module.id_str}",
-                    module.role.value,
+                    f"{index} {module.id_str}",
+                    role.value,
                     _fmt(module.current, "A"),
                     _fmt(module.voltage, "V"),
                     _fmt(module.power, "W"),
                     _fmt(module.energy, "Wh"),
                 )
             self._panel("mppt", "MPPT modules", table)
-            self._ensure_series(inverter.has_inverter_model, mppt.modules)
+            self._ensure_series(inverter.inverter is not None, mppt.module_roles)
 
-        if inverter.has_storage_model:
-            storage = await inverter.read_storage()
+        if (storage := inverter.storage) is not None:
             table = Table.grid(padding=(0, 1))
             table.add_row("State of charge", _fmt(storage.state_of_charge, "%"))
-            table.add_row("State", str(storage.state or "—"))
+            charge_state = storage.state
+            table.add_row(
+                "State", charge_state.name if charge_state is not None else "—"
+            )
             table.add_row(
                 "Charge ref. power", _fmt(storage.charge_reference_power, "W")
             )
@@ -457,10 +492,9 @@ class MonitorApp(App[None]):
             table.add_row("Grid charging", _bool(storage.grid_charging))
             self._panel("storage", "Storage", table)
 
-        if inverter.has_immediate_controls:
-            limit = await inverter.read_power_limit()
+        if (limit := inverter.controls) is not None:
             table = Table.grid(padding=(0, 1))
-            table.add_row("Limit", _fmt(limit.percent, "%"))
+            table.add_row("Limit", _fmt(limit.power_limit, "%"))
             table.add_row("Enabled", _bool(limit.enabled))
             table.add_row("Revert", _fmt(limit.revert_seconds, "s", digits=0))
             self._panel("powerlimit", "Power limit", table)
@@ -468,7 +502,7 @@ class MonitorApp(App[None]):
         self._history.append((monotonic(), sample))
         self._redraw_graph()
 
-    def _ensure_series(self, has_ac: bool, modules: list[Any]) -> None:
+    def _ensure_series(self, has_ac: bool, roles: list[ModuleRole]) -> None:
         """Populate the series selector once, from the discovered layout."""
         if self._series:
             return
@@ -480,9 +514,9 @@ class MonitorApp(App[None]):
             ModuleRole.STORAGE_DISCHARGE: "Battery discharge",
             ModuleRole.STORAGE_BIDIRECTIONAL: "Battery",
         }
-        for module in modules:
-            label = role_labels.get(module.role, f"MPPT {module.index}")
-            series.append((f"mod_{module.index}", label))
+        for index, role in enumerate(roles, start=1):
+            label = role_labels.get(role, f"MPPT {index}")
+            series.append((f"mod_{index}", label))
         self._series = series
         selector = self.query_one("#series", SelectionList)
         selector.border_title = "Series"
@@ -525,14 +559,16 @@ class MonitorApp(App[None]):
         renderable.add_row(body)
         self.query_one(f"#{widget_id}", Static).update(renderable)
 
-    async def run_write(self, description: str, action: Awaitable[None]) -> str:
+    async def run_write(
+        self, description: str, action: Callable[[], Awaitable[None]]
+    ) -> str:
         """Run a write action under the lock, log and return a status string."""
         if self._inverter is None:
             self._log("[red]Not connected[/red]")
             return "[red]Not connected[/red]"
         async with self._lock:
             try:
-                await action
+                await action()
             except ValueError as err:
                 message = f"{description} rejected: {err}"
                 self._log(f"[red]{message}[/red]")
@@ -551,7 +587,7 @@ class MonitorApp(App[None]):
             return "[red]Not connected[/red]"
         async with self._lock:
             try:
-                allowed = await self._inverter.probe_write_access()
+                allowed = await _controls(self._inverter).probe_write_access()
             except (ModbusError, SunSpecError) as err:
                 self._log(f"[red]Write probe failed:[/red] {err}")
                 return f"[red]Write probe failed: {err}[/red]"

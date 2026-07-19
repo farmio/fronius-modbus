@@ -5,7 +5,12 @@ from unittest.mock import patch
 import pytest
 from modbus_connection.mock import MockModbusUnit
 
-from fronius_modbus import FroniusModbusInverter, SunSpecError, datamanager_unit_id
+from fronius_modbus import (
+    FroniusModbusInverter,
+    SunSpecError,
+    SunSpecMapShiftError,
+    datamanager_unit_id,
+)
 from fronius_modbus.sunspec import MULTI_MPPT_MODEL_ID
 from fronius_modbus.testing import MpptModuleSpec, build_sunspec_map
 
@@ -28,10 +33,10 @@ async def test_data_type_detection(
     inverter = FroniusModbusInverter(mock_modbus_unit, has_storage=False)
     await inverter.discover()
     assert inverter.float_mode is expected_float_mode
-    assert inverter.has_mppt is True
+    assert inverter.mppt is not None
 
-    data = await inverter.read_mppt()
-    assert data.modules[0].power == 3300
+    await inverter.async_update()
+    assert inverter.mppt.modules[0].power == 3300
 
 
 @pytest.mark.parametrize(
@@ -62,7 +67,9 @@ async def test_storage_auto_detection(
     await inverter.discover()
     assert inverter.has_storage is expected_has_storage
 
-    data = await inverter.read_mppt()
+    await inverter.async_update()
+    data = inverter.mppt
+    assert data is not None
     if expected_has_storage:
         assert data.storage_charge_energy_total == 200_000
         assert data.storage_discharge_energy_total == 150_000
@@ -84,37 +91,42 @@ async def test_no_mppt_model(mock_modbus_unit: MockModbusUnit) -> None:
     mock_modbus_unit.holding.update(build_sunspec_map([], include_mppt_model=False))
     inverter = FroniusModbusInverter(mock_modbus_unit, has_storage=False)
     await inverter.discover()
-    assert inverter.has_mppt is False
-    with pytest.raises(SunSpecError, match="not available"):
-        await inverter.read_mppt()
+    assert inverter.mppt is None
 
 
 async def test_rediscovery_on_register_map_shift(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
-    """Test a data type change at runtime triggers re-discovery."""
+    """Test a data type change at runtime raises, and re-discovery recovers."""
     mock_modbus_unit.holding.update(build_sunspec_map(MODULES, float_mode=True))
     inverter = FroniusModbusInverter(mock_modbus_unit, has_storage=False)
     await inverter.discover()
-    assert (await inverter.read_mppt()).modules[0].power == 3300
+    await inverter.async_update()
+    assert inverter.mppt is not None
+    assert inverter.mppt.modules[0].power == 3300
 
     # switching to int+SF shifts the model 160 address
     mock_modbus_unit.holding.clear()
     mock_modbus_unit.holding.update(build_sunspec_map(MODULES, float_mode=False))
-    data = await inverter.read_mppt()
-    assert data.modules[0].power == 3300
+    with pytest.raises(SunSpecMapShiftError):
+        await inverter.async_update()
+
+    await inverter.discover()
+    await inverter.async_update()
+    assert inverter.mppt is not None
+    assert inverter.mppt.modules[0].power == 3300
     assert inverter.float_mode is False
 
 
 async def test_broken_register_map(mock_modbus_unit: MockModbusUnit) -> None:
-    """Test a broken register map raises after failed re-discovery."""
+    """Test a broken register map surfaces as SunSpecError."""
     mock_modbus_unit.holding.update(build_sunspec_map(MODULES))
     inverter = FroniusModbusInverter(mock_modbus_unit, has_storage=False)
     await inverter.discover()
 
     mock_modbus_unit.holding.clear()
     with pytest.raises(SunSpecError):
-        await inverter.read_mppt()
+        await inverter.async_update()
 
 
 async def test_scale_factors_read_atomically_with_values(
@@ -134,12 +146,13 @@ async def test_scale_factors_read_atomically_with_values(
     inverter = FroniusModbusInverter(mock_modbus_unit)
     await inverter.discover()
 
+    assert inverter.mppt is not None
     with patch.object(
         mock_modbus_unit,
         "read_holding_registers",
         wraps=mock_modbus_unit.read_holding_registers,
     ) as spy:
-        await inverter.read_mppt()
+        await inverter.mppt.async_update()
 
     model = next(
         model for model in inverter.model_chain if model.model_id == MULTI_MPPT_MODEL_ID

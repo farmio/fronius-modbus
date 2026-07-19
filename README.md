@@ -57,23 +57,25 @@ async def main() -> None:
     print("Data type:", "float" if inverter.float_mode else "int+SF")
     print("Storage:", inverter.has_storage)  # auto-detected during discovery
 
-    identity = await inverter.read_device_identity()
-    print(identity.manufacturer, identity.model, identity.serial_number)
+    # one pooled read refreshes every discovered model
+    await inverter.async_update()
 
-    ac_dc = await inverter.read_inverter()
-    print("AC power:", ac_dc.ac_power, "state:", ac_dc.operating_state)
+    if (identity := inverter.common) is not None:
+        print(identity.manufacturer, identity.model, identity.serial_number)
 
-    if inverter.has_mppt:
-        data = await inverter.read_mppt()
-        for module in data.modules:
-            print(module.index, module.id_str, module.role, module.power)
-        print("PV energy total:", data.pv_energy_total)
-        print("Battery charged:", data.storage_charge_energy_total)
-        print("Battery discharged:", data.storage_discharge_energy_total)
+    if (ac_dc := inverter.inverter) is not None:
+        print("AC power:", ac_dc.ac_power, "state:", ac_dc.operating_state)
 
-    if inverter.has_storage_model:
-        storage = await inverter.read_storage()
+    if (mppt := inverter.mppt) is not None:
+        for module, role in zip(mppt.modules, mppt.module_roles, strict=True):
+            print(module.id_str, role, module.power)
+        print("PV energy total:", mppt.pv_energy_total)
+        print("Battery charged:", mppt.storage_charge_energy_total)
+        print("Battery discharged:", mppt.storage_discharge_energy_total)
+
+    if (storage := inverter.storage) is not None:
         print("SoC:", storage.state_of_charge, "state:", storage.state)
+        await storage.set_limits(charge=50.0, revert_seconds=60)
 
     await connection.close()
 

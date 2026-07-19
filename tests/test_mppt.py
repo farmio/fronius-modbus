@@ -3,8 +3,7 @@
 import pytest
 from modbus_connection.mock import MockModbusUnit
 
-from fronius_modbus import FroniusModbusInverter, ModuleRole, MpptData
-from fronius_modbus.mppt import classify_modules
+from fronius_modbus import FroniusModbusInverter, ModuleRole, Mppt
 from fronius_modbus.testing import MpptModuleSpec, build_sunspec_map
 
 # module names as reported by real GEN24 hybrid inverters
@@ -24,11 +23,13 @@ GEN24_HYBRID_MODULES = [
 
 async def _read_mppt(
     unit: MockModbusUnit, registers: dict[int, int], has_storage: bool
-) -> MpptData:
+) -> Mppt:
     unit.holding.update(registers)
     inverter = FroniusModbusInverter(unit, has_storage=has_storage)
     await inverter.discover()
-    return await inverter.read_mppt()
+    await inverter.async_update()
+    assert inverter.mppt is not None
+    return inverter.mppt
 
 
 async def test_scaled_values(mock_modbus_unit: MockModbusUnit) -> None:
@@ -37,7 +38,6 @@ async def test_scaled_values(mock_modbus_unit: MockModbusUnit) -> None:
         mock_modbus_unit, build_sunspec_map(GEN24_HYBRID_MODULES), has_storage=True
     )
     module_1 = data.modules[0]
-    assert module_1.index == 1
     assert module_1.id_str == "MPPT 1"
     assert module_1.current == 8.2  # scale factor -1
     assert module_1.voltage == 402.1
@@ -72,7 +72,7 @@ async def test_derived_totals_gen24_hybrid(mock_modbus_unit: MockModbusUnit) -> 
     data = await _read_mppt(
         mock_modbus_unit, build_sunspec_map(GEN24_HYBRID_MODULES), has_storage=True
     )
-    assert [module.role for module in data.modules] == [
+    assert data.module_roles == [
         ModuleRole.PV,
         ModuleRole.PV,
         ModuleRole.STORAGE_CHARGE,
@@ -106,7 +106,7 @@ async def test_derived_totals_without_storage(
     data = await _read_mppt(
         mock_modbus_unit, build_sunspec_map(modules), has_storage=False
     )
-    assert all(module.role is ModuleRole.PV for module in data.modules)
+    assert data.module_roles == [ModuleRole.PV] * 4
     assert data.pv_energy_total == 4_000_000
     assert data.storage_charge_energy_total is None
     assert data.storage_discharge_energy_total is None
@@ -190,8 +190,15 @@ async def test_pv_total_none_when_energy_missing(
         ),
     ],
 )
-def test_classify_modules(
-    id_strs: list[str], has_storage: bool, expected: list[ModuleRole]
+async def test_module_role_classification(
+    mock_modbus_unit: MockModbusUnit,
+    id_strs: list[str],
+    has_storage: bool,
+    expected: list[ModuleRole],
 ) -> None:
     """Test MPPT module role classification."""
-    assert classify_modules(id_strs, has_storage) == expected
+    modules = [MpptModuleSpec(id_str=id_str) for id_str in id_strs]
+    data = await _read_mppt(
+        mock_modbus_unit, build_sunspec_map(modules), has_storage=has_storage
+    )
+    assert data.module_roles == expected
