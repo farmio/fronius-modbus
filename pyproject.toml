@@ -19,7 +19,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Topic :: Home Automation",
 ]
-dependencies = ["modbus-connection>=3.7.0"]
+dependencies = ["modbus-connection>=4.0.0a2"]
 
 [project.urls]
 Homepage = "https://github.com/farmio/fronius-modbus"
@@ -29,7 +29,7 @@ Changelog = "https://github.com/farmio/fronius-modbus/releases"
 [dependency-groups]
 dev = [
   # tmodbus backend for the scripts in scripts/
-  "modbus-connection[tmodbus]>=3.7.0",
+  "modbus-connection[tmodbus]>=4.0.0a2",
   "mypy>=1.14",
   "pytest>=8",
   "pytest-asyncio>=0.25",

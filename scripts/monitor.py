@@ -358,7 +358,7 @@ class MonitorApp(App[None]):
 
     async def on_ready(self) -> None:
         """Connect, poll once, then start the poll timer (after first paint)."""
-        await self._reconnect()
+        await self._setup_connection()
         await self._poll()
         self._timer = self.set_interval(self.interval, self._poll)
 
@@ -382,11 +382,8 @@ class MonitorApp(App[None]):
         stamp = datetime.now().strftime("%H:%M:%S")
         self.query_one("#log", RichLog).write(f"[dim]{stamp}[/dim] {message}")
 
-    async def _reconnect(self) -> None:
-        if self._connection is not None:
-            await self._connection.close()
-            self._connection = None
-            self._inverter = None
+    async def _setup_connection(self) -> None:
+        """Open the connection and discover the SunSpec models."""
         try:
             connection = await self._connect(self._host, self._port)
             inverter = FroniusModbusInverter(
@@ -412,11 +409,12 @@ class MonitorApp(App[None]):
                 self._log("Re-discovering the SunSpec models")
                 try:
                     await self._inverter.discover()
-                except (ModbusError, SunSpecError):
-                    await self._reconnect()
+                except (ModbusError, SunSpecError) as discover_err:
+                    self._log(f"[red]Re-discovery failed:[/red] {discover_err}")
             except (ModbusError, SunSpecError) as err:
-                self._log(f"[red]Read failed:[/red] {err} — reconnecting")
-                await self._reconnect()
+                # the connection re-establishes a dropped link by itself, so a
+                # failed read is simply retried on the next poll
+                self._log(f"[red]Read failed:[/red] {err}")
 
     async def _refresh(self, inverter: FroniusModbusInverter) -> None:
         await inverter.async_update()
