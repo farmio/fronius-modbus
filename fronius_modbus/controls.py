@@ -11,7 +11,6 @@ model start, per the SunSpec model 123 definition.
 
 from modbus_connection import ModbusExceptionError
 from modbus_connection.model import sunspec as sunspec_fields
-from modbus_connection.model.fields import NumberField
 
 from .sunspec import SunSpecComponent
 
@@ -23,9 +22,7 @@ class Controls(SunSpecComponent):
     connect_window = sunspec_fields.uint16(2, writable=True)
     power_limit = sunspec_fields.uint16(5, scale_register=23, unit="%", writable=True)
     revert_seconds = sunspec_fields.uint16(7, writable=True)
-    enabled: NumberField[bool] = NumberField(
-        9, signed=False, nan=0xFFFF, convert=bool, writable=True
-    )
+    enabled = sunspec_fields.boolean(9, writable=True)
 
     async def set_power_limit(self, percent: float, *, revert_seconds: int = 0) -> None:
         """Limit output power to ``percent`` of the nominal power and enable.
