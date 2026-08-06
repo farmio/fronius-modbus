@@ -10,9 +10,8 @@ from enum import StrEnum
 from functools import cached_property
 
 from modbus_connection import ModbusUnit
-from modbus_connection.model import Component, repeating_group
+from modbus_connection.model import Component, integer, repeating_group
 from modbus_connection.model import sunspec as sunspec_fields
-from modbus_connection.model.fields import NumberField
 
 from .sunspec import SunSpecComponent, SunSpecModel
 
@@ -43,9 +42,10 @@ class MpptModule(Component):
 class Mppt(SunSpecComponent):
     """The Multiple MPPT model: per-module DC values, roles classified."""
 
-    # count register N: unsigned with the uint16 not-implemented sentinel
+    # count register N: unsigned with the uint16 not-implemented sentinel.
+    # repeating_group needs an int-typed field, which sunspec.uint16 is not.
     modules = repeating_group(
-        NumberField(8, signed=False, nan=0xFFFF), MpptModule, stride=20
+        integer(8, signed=False, nan=0xFFFF), MpptModule, stride=20
     )
 
     def __init__(
