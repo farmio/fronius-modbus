@@ -21,6 +21,7 @@ from .sunspec import (
     SunSpecComponent,
     SunSpecError,
     SunSpecModel,
+    SunSpecModels,
     scan,
 )
 
@@ -74,7 +75,7 @@ class FroniusModbusInverter:
         """
         self._unit = unit
         self._has_storage_override = has_storage
-        self._models: dict[int, list[SunSpecModel]] = {}
+        self._models = SunSpecModels()
         self._group: ComponentGroup | None = None
         self.common: Common | None = None
         self.inverter: Inverter | None = None
@@ -95,9 +96,9 @@ class FroniusModbusInverter:
         self.has_storage = has_storage
 
         unit = self._unit
-        common = self._find_model(COMMON_MODEL_ID)
+        common = self._models.first(COMMON_MODEL_ID)
         self.common = Common(unit, common) if common else None
-        inverter = self._find_model(*INVERTER_MODELS_FLOAT, *INVERTER_MODELS_INT_SF)
+        inverter = self._models.first(*INVERTER_MODELS_FLOAT, *INVERTER_MODELS_INT_SF)
         if inverter is None:
             self.inverter = None
         elif inverter.model_id in INVERTER_MODELS_FLOAT:
@@ -107,11 +108,11 @@ class FroniusModbusInverter:
         self.float_mode = (
             isinstance(self.inverter, InverterFloat) if self.inverter else None
         )
-        mppt = self._find_model(MULTI_MPPT_MODEL_ID)
+        mppt = self._models.first(MULTI_MPPT_MODEL_ID)
         self.mppt = Mppt(unit, mppt, has_storage) if mppt else None
-        storage = self._find_model(STORAGE_MODEL_ID)
+        storage = self._models.first(STORAGE_MODEL_ID)
         self.storage = Storage(unit, storage) if storage else None
-        controls = self._find_model(IMMEDIATE_CONTROLS_MODEL_ID)
+        controls = self._models.first(IMMEDIATE_CONTROLS_MODEL_ID)
         self.controls = Controls(unit, controls) if controls else None
         # One pooled-read group over every discovered model: adjacent registers
         # from different models are fetched together on async_update.
@@ -146,19 +147,9 @@ class FroniusModbusInverter:
             key=lambda model: model.address,
         )
 
-    def _find_model(self, *model_ids: int) -> SunSpecModel | None:
-        return next(
-            (
-                self._models[model_id][0]
-                for model_id in model_ids
-                if model_id in self._models
-            ),
-            None,
-        )
-
     async def _detect_storage(self) -> bool:
         """Detect a connected storage from the Basic Storage Control Model."""
-        storage_model = self._find_model(STORAGE_MODEL_ID)
+        storage_model = self._models.first(STORAGE_MODEL_ID)
         if storage_model is None:
             return False
         # WChaMax, the model's first data register: reads 0 when a
