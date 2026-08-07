@@ -1,7 +1,5 @@
 """Tests for the FroniusModbusInverter device class."""
 
-from unittest.mock import patch
-
 import pytest
 from modbus_connection.mock import MockModbusUnit
 
@@ -147,12 +145,8 @@ async def test_scale_factors_read_atomically_with_values(
     await inverter.discover()
 
     assert inverter.mppt is not None
-    with patch.object(
-        mock_modbus_unit,
-        "read_holding_registers",
-        wraps=mock_modbus_unit.read_holding_registers,
-    ) as spy:
-        await inverter.mppt.async_update()
+    mock_modbus_unit.read_events.clear()
+    await inverter.mppt.async_update()
 
     model = next(
         model for model in inverter.model_chain if model.model_id == MULTI_MPPT_MODEL_ID
@@ -160,12 +154,13 @@ async def test_scale_factors_read_atomically_with_values(
     data_address = model.address + 2
     first_scale_factor = data_address  # DCA_SF
     last_value_register = data_address + 8 + 3 * 20 + 13  # module 4 DCWH high word
-    covering_requests = [
-        (address, count)
-        for address, count in (call.args for call in spy.call_args_list)
-        if address <= first_scale_factor and address + count > last_value_register
+    covering_reads = [
+        event
+        for event in mock_modbus_unit.read_events
+        if event.address <= first_scale_factor
+        and event.address + event.count > last_value_register
     ]
-    assert len(covering_requests) == 1
+    assert len(covering_reads) == 1
 
 
 def test_datamanager_unit_id() -> None:
