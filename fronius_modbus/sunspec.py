@@ -7,6 +7,7 @@ from modbus_connection.model.sunspec import (
     SunSpecError,
     SunSpecMapShiftError,
     SunSpecModel,
+    SunSpecModels,
     scan,
 )
 
@@ -15,6 +16,7 @@ __all__ = [
     "SunSpecError",
     "SunSpecMapShiftError",
     "SunSpecModel",
+    "SunSpecModels",
     "scan",
 ]
 

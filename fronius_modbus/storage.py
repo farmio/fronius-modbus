@@ -15,7 +15,6 @@ from enum import IntEnum
 from typing import Final
 
 from modbus_connection.model import sunspec as sunspec_fields
-from modbus_connection.model.fields import NumberField
 
 from .sunspec import SunSpecComponent
 
@@ -51,9 +50,7 @@ class Storage(SunSpecComponent):
     )
     control_mode = sunspec_fields.bitfield16(5, writable=True)
     revert_seconds = sunspec_fields.uint16(15, writable=True)
-    grid_charging: NumberField[bool] = NumberField(
-        17, signed=False, nan=0xFFFF, convert=bool, writable=True
-    )
+    grid_charging = sunspec_fields.boolean(17, writable=True)
 
     @property
     def charge_limit_enabled(self) -> bool | None:
