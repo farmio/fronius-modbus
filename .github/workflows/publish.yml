@@ -9,9 +9,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # the version comes from the git tag, so the tags have to be fetched
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v7
       - name: Build distributions
         run: uv build
+      - name: Check the built version against the release tag
+        run: |
+          # guards against a build that did not see the tag and would
+          # otherwise publish a development version
+          built=$(ls dist/*.whl | sed -E 's/.*fronius_modbus-(.+)-py3-none-any\.whl/\1/')
+          if [ "${GITHUB_REF_NAME}" != "$built" ]; then
+            echo "::error::release tag ${GITHUB_REF_NAME} would publish ${built}"
+            exit 1
+          fi
+          echo "Publishing ${built}"
       - uses: actions/upload-artifact@v6
         with:
           name: dist
