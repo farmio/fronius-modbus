@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling>=1.27.0"]
+requires = ["hatchling>=1.27.0", "hatch-vcs>=0.4.0"]
 build-backend = "hatchling.build"
 
 [project]
 name = "fronius-modbus"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Library for Fronius inverter Modbus TCP (SunSpec) interfaces, built on modbus-connection"
 readme = "README.md"
 license = "MIT"
@@ -20,6 +20,9 @@ classifiers = [
   "Topic :: Home Automation",
 ]
 dependencies = ["modbus-connection>=4.1.0,<5"]
+
+[tool.hatch.version]
+source = "vcs"
 
 [project.urls]
 Homepage = "https://github.com/farmio/fronius-modbus"
