@@ -23,7 +23,7 @@ the configured data type (*float* vs *int + SF*) and differ between generations.
 This library discovers the model chain at runtime, so no register configuration is
 needed — and the data type setting is detected automatically.
 
-Currently implemented (read-only):
+## Reading
 
 - SunSpec **Common Model (1)**: manufacturer, model, software version and
   serial number.
@@ -35,8 +35,27 @@ Currently implemented (read-only):
   power and lifetime energy per MPP tracker, with module role classification
   (PV string / storage charge / storage discharge) and derived totals
   (PV-only energy, battery charging/discharging energy).
-- SunSpec **Basic Storage Control Model (124)**, read-only values: state of
-  charge, battery status, nominal charge/discharge power reference.
+- SunSpec **Basic Storage Control Model (124)**: state of charge, battery status,
+  charge and discharge limits with their enable flags, minimum reserve and grid
+  charging.
+
+Each model is refreshed in as few pooled block requests as possible, and values
+are read together with their scale factors so the two can never disagree.
+
+## Writing
+
+Write commands require *inverter control via Modbus* to be enabled on the device
+web interface; `Controls.probe_write_access()` reports whether the device accepts
+writes at all.
+
+- **Immediate Controls (123)**: `set_power_limit()` and `clear_power_limit()` to
+  limit the inverter output power.
+- **Basic Storage Control (124)**: `set_limits()` for the battery charge and
+  discharge rates (including forced charging), plus `set_minimum_reserve()` and
+  `set_grid_charging()`.
+
+The limit setters take a `revert_seconds` auto-revert, so a controller that dies
+cannot leave the inverter constrained.
 
 ## Usage
 
@@ -132,6 +151,10 @@ connection.for_unit(1).holding.update(
     )
 )
 ```
+
+## License
+
+GPL-3.0-or-later, see [LICENSE](LICENSE).
 
 ## Disclaimer
 

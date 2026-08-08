@@ -7,16 +7,14 @@ name = "fronius-modbus"
 dynamic = ["version"]
 description = "Library for Fronius inverter Modbus TCP (SunSpec) interfaces, built on modbus-connection"
 readme = "README.md"
-license = "MIT"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 authors = [{ name = "Matthias Alphart", email = "farmio@alphart.net" }]
 requires-python = ">=3.12"
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
-  "Programming Language :: Python :: 3.14",
   "Topic :: Home Automation",
 ]
 dependencies = ["modbus-connection>=4.1.0,<5"]
