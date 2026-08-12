@@ -119,6 +119,26 @@ async def test_set_storage_limits(mock_modbus_unit: MockModbusUnit) -> None:
     assert storage.discharge_limit_enabled is True
 
 
+async def test_limit_switches_keep_other_mode_bits(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Test writing a limit switch leaves the rest of StorCtl_Mod alone.
+
+    Both switches share one register with whatever else a device packs into
+    it, so they are written by merging instead of replacing the register.
+    """
+    inverter = await _discovered_inverter(
+        mock_modbus_unit, build_sunspec_map([], storage_wcha_max=12800)
+    )
+    storage = _storage(inverter)
+    data_address = _model_data_address(inverter, STORAGE_MODEL_ID)
+    mock_modbus_unit.holding[data_address + 3] = 0b1000
+
+    await storage.set_limits(charge=50.0)
+
+    assert mock_modbus_unit.holding[data_address + 3] == 0b1001
+
+
 async def test_forced_charging(mock_modbus_unit: MockModbusUnit) -> None:
     """Test a negative discharge limit (forced charging) encodes signed."""
     inverter = await _discovered_inverter(

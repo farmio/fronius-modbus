@@ -12,15 +12,11 @@ model start, per the SunSpec model 124 definition.
 """
 
 from enum import IntEnum
-from typing import Final
 
+from modbus_connection.model import bit
 from modbus_connection.model import sunspec as sunspec_fields
 
 from .sunspec import SunSpecComponent
-
-# StorCtl_Mod bits activating the charge / discharge limits
-_MODE_CHARGE_LIMIT: Final = 0b01
-_MODE_DISCHARGE_LIMIT: Final = 0b10
 
 
 class StorageState(IntEnum):
@@ -48,24 +44,11 @@ class Storage(SunSpecComponent):
     discharge_limit = sunspec_fields.int16(
         12, scale_register=25, unit="%", writable=True
     )
-    control_mode = sunspec_fields.bitfield16(5, writable=True)
     revert_seconds = sunspec_fields.uint16(15, writable=True)
     grid_charging = sunspec_fields.boolean(17, writable=True)
-
-    @property
-    def charge_limit_enabled(self) -> bool | None:
-        """Whether the charge limit (InWRte) is active."""
-        return self._mode_bit(_MODE_CHARGE_LIMIT)
-
-    @property
-    def discharge_limit_enabled(self) -> bool | None:
-        """Whether the discharge limit (OutWRte) is active."""
-        return self._mode_bit(_MODE_DISCHARGE_LIMIT)
-
-    def _mode_bit(self, bit: int) -> bool | None:
-        if (mode := self.control_mode) is None:
-            return None
-        return bool(int(mode) & bit)
+    # StorCtl_Mod packs both limit switches into one register
+    charge_limit_enabled = bit(5, 0, writable=True)
+    discharge_limit_enabled = bit(5, 1, writable=True)
 
     async def set_limits(
         self,
@@ -90,10 +73,8 @@ class Storage(SunSpecComponent):
             await self.write("charge_limit", charge)
         if discharge is not None:
             await self.write("discharge_limit", discharge)
-        mode = (_MODE_CHARGE_LIMIT if charge is not None else 0) | (
-            _MODE_DISCHARGE_LIMIT if discharge is not None else 0
-        )
-        await self.write("control_mode", mode)
+        await self.write("charge_limit_enabled", charge is not None)
+        await self.write("discharge_limit_enabled", discharge is not None)
 
     async def set_minimum_reserve(self, percent: float) -> None:
         """Set the minimum state of charge reserve in percent."""
