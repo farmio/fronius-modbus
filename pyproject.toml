@@ -17,7 +17,7 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Topic :: Home Automation",
 ]
-dependencies = ["modbus-connection>=4.1.0,<5"]
+dependencies = ["modbus-connection>=4.6.1,<5"]
 
 [tool.hatch.version]
 source = "vcs"
@@ -30,7 +30,7 @@ Changelog = "https://github.com/farmio/fronius-modbus/releases"
 [dependency-groups]
 dev = [
   # tmodbus backend for the scripts in scripts/
-  "modbus-connection[tmodbus]>=4.1.0,<5",
+  "modbus-connection[tmodbus]>=4.6.1,<5",
   "mypy>=1.14",
   "pytest>=8",
   "pytest-asyncio>=0.25",
