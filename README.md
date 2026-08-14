@@ -42,6 +42,14 @@ needed — and the data type setting is detected automatically.
 Each model is refreshed in as few pooled block requests as possible, and values
 are read together with their scale factors so the two can never disagree.
 
+> [!NOTE]
+> With the device set to *float*, the inverter model's `energy_total` is an IEEE
+> 754 single, which represents integers exactly only up to 2^24 = 16.78 MWh. Past
+> that it quantises — 4 Wh steps at 48 MWh, coarser as the counter grows. The
+> MPPT model counts in `acc32` with a scale factor, so `pv_energy_total` and the
+> battery totals keep full resolution at any reading. Prefer them for lifetime
+> energy, or set the device to *int + SF*.
+
 ## Writing
 
 Write commands require *inverter control via Modbus* to be enabled on the device
