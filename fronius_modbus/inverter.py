@@ -5,12 +5,14 @@ from typing import Final
 from modbus_connection import ModbusUnit
 from modbus_connection.model import ComponentGroup
 
+from .basic_settings import BasicSettings
 from .common import Common
 from .controls import Controls
 from .inverter_model import Inverter, InverterFloat, InverterInteger
 from .mppt import Mppt
 from .storage import Storage
 from .sunspec import (
+    BASIC_SETTINGS_MODEL_ID,
     COMMON_MODEL_ID,
     IMMEDIATE_CONTROLS_MODEL_ID,
     INVERTER_MODELS_FLOAT,
@@ -82,6 +84,7 @@ class FroniusModbusInverter:
         self.mppt: Mppt | None = None
         self.storage: Storage | None = None
         self.controls: Controls | None = None
+        self.basic_settings: BasicSettings | None = None
         self.float_mode: bool | None = None
         self.has_storage: bool | None = has_storage
 
@@ -114,6 +117,8 @@ class FroniusModbusInverter:
         self.storage = Storage(unit, storage) if storage else None
         controls = self._models.first(IMMEDIATE_CONTROLS_MODEL_ID)
         self.controls = Controls(unit, controls) if controls else None
+        settings = self._models.first(BASIC_SETTINGS_MODEL_ID)
+        self.basic_settings = BasicSettings(unit, settings) if settings else None
         # One pooled-read group over every discovered model: adjacent registers
         # from different models are fetched together on async_update.
         self._group = ComponentGroup(unit, list(self.components))
@@ -129,6 +134,7 @@ class FroniusModbusInverter:
                 self.mppt,
                 self.storage,
                 self.controls,
+                self.basic_settings,
             )
             if component is not None
         )
