@@ -218,6 +218,7 @@ def build_sunspec_map(
     storage_soc: float | None = None,
     storage_state: int | None = None,
     storage_min_reserve: float | None = None,
+    max_power: int = 10000,
     inverter: InverterModelSpec | None = None,
     manufacturer: str = "Fronius",
     device_model: str = "Test Model",
@@ -234,6 +235,9 @@ def build_sunspec_map(
     when no storage is connected; plain inverters don't expose it at all.
     ``storage_soc`` (percent) and ``storage_state`` (ChaSt enum) fill its
     read-only values.
+
+    ``max_power`` is the Basic Settings model's WMax in watts - the reference
+    the Immediate Controls power limit is a percentage of.
     """
     registers: dict[int, int] = {
         SUNSPEC_BASE_ADDRESS: 0x5375,  # "Su"
@@ -258,6 +262,12 @@ def build_sunspec_map(
         add_model(113, _float_inverter_data(inverter_spec))
     else:
         add_model(103, _int_sf_inverter_data(inverter_spec))
+
+    # Basic Settings: WMax with a scale factor of 1, as Fronius reports it
+    settings_data = [0] * 30
+    settings_data[0] = max_power // 10  # WMax
+    settings_data[20] = _sf_word(1)  # WMax_SF
+    add_model(121, settings_data)
 
     # Immediate Controls: no active limit, WMaxLimPct at 100%
     controls_data = [0] * 24

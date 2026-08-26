@@ -17,8 +17,9 @@ async def test_scan(mock_modbus_unit: MockModbusUnit) -> None:
     assert models == {
         1: [SunSpecModel(model_id=1, address=40002, length=66)],
         113: [SunSpecModel(model_id=113, address=40070, length=60)],
-        123: [SunSpecModel(model_id=123, address=40132, length=24)],
-        160: [SunSpecModel(model_id=160, address=40158, length=28)],
+        121: [SunSpecModel(model_id=121, address=40132, length=30)],
+        123: [SunSpecModel(model_id=123, address=40164, length=24)],
+        160: [SunSpecModel(model_id=160, address=40190, length=28)],
     }
 
 

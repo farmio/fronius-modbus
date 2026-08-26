@@ -35,6 +35,8 @@ needed — and the data type setting is detected automatically.
   power and lifetime energy per MPP tracker, with module role classification
   (PV string / storage charge / storage discharge) and derived totals
   (PV-only energy, battery charging/discharging energy).
+- SunSpec **Basic Settings Model (121)**: the inverter's nominal maximum power
+  output, which the output power limit is a percentage of.
 - SunSpec **Basic Storage Control Model (124)**: state of charge, battery status,
   charge and discharge limits with their enable flags, minimum reserve and grid
   charging.
