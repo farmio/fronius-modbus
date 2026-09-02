@@ -227,6 +227,11 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
             print(f"  enabled:        {limit.enabled}")
             print(f"  revert seconds: {limit.revert_seconds}")
 
+        if (status := inverter.measurements_status) is not None:
+            print("\nMeasurements & status:")
+            print(f"  AC energy total:      {status.ac_energy_total} Wh")
+            print(f"  power limit active:   {status.power_limit_active}")
+
         await run_write_commands(inverter, args)
 
         if (data := inverter.mppt) is None:

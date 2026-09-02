@@ -14,6 +14,7 @@ from .inverter_model import (
     InverterInteger,
     OperatingState,
 )
+from .measurements_status import MeasurementsStatus
 from .mppt import ModuleRole, Mppt, MpptModule
 from .storage import Storage, StorageState
 from .sunspec import SunSpecError, SunSpecMapShiftError, SunSpecModel
@@ -27,6 +28,7 @@ __all__ = [
     "Inverter",
     "InverterFloat",
     "InverterInteger",
+    "MeasurementsStatus",
     "ModuleRole",
     "Mppt",
     "MpptModule",

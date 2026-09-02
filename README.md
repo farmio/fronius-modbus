@@ -37,6 +37,8 @@ needed — and the data type setting is detected automatically.
   (PV-only energy, battery charging/discharging energy).
 - SunSpec **Basic Settings Model (121)**: the inverter's nominal maximum power
   output, which the output power limit is a percentage of.
+- SunSpec **Measurements_Status Model (122)**: lifetime AC-side energy and
+  whether the output power limit is currently active.
 - SunSpec **Basic Storage Control Model (124)**: state of charge, battery status,
   charge and discharge limits with their enable flags, minimum reserve and grid
   charging.
@@ -50,7 +52,9 @@ are read together with their scale factors so the two can never disagree.
 > that it quantises — 4 Wh steps at 48 MWh, coarser as the counter grows. The
 > MPPT model counts in `acc32` with a scale factor, so `pv_energy_total` and the
 > battery totals keep full resolution at any reading. Prefer them for lifetime
-> energy, or set the device to *int + SF*.
+> energy, or set the device to *int + SF*. The Measurements_Status model's
+> `ac_energy_total` is a full-resolution `acc64` with no scale factor, so it's
+> also preferable to the inverter model's `energy_total` in float mode.
 
 ## Writing
 
