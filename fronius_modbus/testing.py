@@ -279,11 +279,11 @@ def build_sunspec_map(
     settings_data[20] = _sf_word(1)  # WMax_SF
     add_model(121, settings_data)
 
-    # Measurements_Status: ActWh at offset 5 (acc64), StActCtl at offset 35 (bitfield32)
+    # Measurements_Status: ActWh (acc64) and StActCtl's FixedW bit
     status_data = [0] * 44
     status_data[3:7] = _uint64_words(measurements_status_ac_energy_total or 0)
     if measurements_status_power_limit_active:
-        status_data[34] |= 1  # StActCtl low word, bit 0: FixedW
+        status_data[34] |= 1  # StActCtl low word, FixedW bit 0
     add_model(122, status_data)
 
     # Immediate Controls: no active limit, WMaxLimPct at 100%

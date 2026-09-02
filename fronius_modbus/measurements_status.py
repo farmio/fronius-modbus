@@ -17,5 +17,5 @@ class MeasurementsStatus(SunSpecComponent):
     """The Measurements_Status model: lifetime AC energy and control status."""
 
     ac_energy_total = sunspec_fields.acc64(5, unit="Wh")
-    # StActCtl low word (big-endian bitfield32, 35-36); bit 0 = FixedW
+    # FixedW is bit 0 of StActCtl's low word (big-endian bitfield32 at 35-36)
     power_limit_active = bit(36, 0)
