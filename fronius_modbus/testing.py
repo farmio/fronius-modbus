@@ -224,6 +224,7 @@ def build_sunspec_map(
     storage_min_reserve: float | None = None,
     max_power: int = 10000,
     measurements_status_ac_energy_total: int | None = None,
+    measurements_status_power_limit_active: bool = False,
     inverter: InverterModelSpec | None = None,
     manufacturer: str = "Fronius",
     device_model: str = "Test Model",
@@ -246,6 +247,7 @@ def build_sunspec_map(
 
     ``measurements_status_ac_energy_total`` is the Measurements_Status model's
     ActWh in watt-hours - full acc64 resolution, no scale factor.
+    ``measurements_status_power_limit_active`` sets StActCtl's FixedW bit.
     """
     registers: dict[int, int] = {
         SUNSPEC_BASE_ADDRESS: 0x5375,  # "Su"
@@ -277,9 +279,11 @@ def build_sunspec_map(
     settings_data[20] = _sf_word(1)  # WMax_SF
     add_model(121, settings_data)
 
-    # Measurements_Status: ActWh (acc64)
+    # Measurements_Status: ActWh (acc64) and StActCtl's FixedW bit
     status_data = [0] * 44
     status_data[3:7] = _uint64_words(measurements_status_ac_energy_total or 0)
+    if measurements_status_power_limit_active:
+        status_data[34] |= 1  # StActCtl low word, FixedW bit 0
     add_model(122, status_data)
 
     # Immediate Controls: no active limit, WMaxLimPct at 100%

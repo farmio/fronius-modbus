@@ -39,3 +39,18 @@ async def test_ac_energy_total_not_accumulated(
     )
     assert inverter.measurements_status is not None
     assert inverter.measurements_status.ac_energy_total is None
+
+
+@pytest.mark.parametrize("power_limit_active", [True, False])
+async def test_power_limit_active(
+    mock_modbus_unit: MockModbusUnit, power_limit_active: bool
+) -> None:
+    """Test the output power limit active flag decodes StActCtl's FixedW bit."""
+    inverter = await _discovered_inverter(
+        mock_modbus_unit,
+        build_sunspec_map(
+            [], measurements_status_power_limit_active=power_limit_active
+        ),
+    )
+    assert inverter.measurements_status is not None
+    assert inverter.measurements_status.power_limit_active is power_limit_active
