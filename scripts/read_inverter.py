@@ -28,7 +28,7 @@ MODEL_NAMES = {
     113: "Inverter (float, three phase)",
     120: "Nameplate",
     121: "Basic Settings",
-    122: "Extended Measurements & Status",
+    122: "Measurements Status",
     123: "Immediate Controls",
     124: "Basic Storage Controls",
     160: "Multiple MPPT",
@@ -228,7 +228,7 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
             print(f"  revert seconds: {limit.revert_seconds}")
 
         if (status := inverter.measurements_status) is not None:
-            print("\nMeasurements & status:")
+            print("\nMeasurements Status:")
             print(f"  AC energy total:      {status.ac_energy_total} Wh")
             print(f"  power limit active:   {status.power_limit_active}")
 
