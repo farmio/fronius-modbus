@@ -122,8 +122,10 @@ class FroniusModbusInverter:
         self.controls = Controls(unit, controls) if controls else None
         settings = self._models.first(BASIC_SETTINGS_MODEL_ID)
         self.basic_settings = BasicSettings(unit, settings) if settings else None
-        status = self._models.first(MEASUREMENTS_STATUS_MODEL_ID)
-        self.measurements_status = MeasurementsStatus(unit, status) if status else None
+        measurements = self._models.first(MEASUREMENTS_STATUS_MODEL_ID)
+        self.measurements_status = (
+            MeasurementsStatus(unit, measurements) if measurements else None
+        )
         # One pooled-read group over every discovered model: adjacent registers
         # from different models are fetched together on async_update.
         self._group = ComponentGroup(unit, list(self.components))

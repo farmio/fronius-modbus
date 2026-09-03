@@ -28,4 +28,8 @@ class MeasurementsStatus(SunSpecComponent):
 
     ac_energy_total = sunspec_fields.acc64(5, unit="Wh")
     # FixedW is bit 0 of StActCtl's low word (big-endian bitfield32 at 35-36)
+    # bit() has no not-implemented handling: an all-ones bitfield32 decodes
+    # to True, harmless here since StActCtl is implemented, but this would
+    # misread StSetLimMsk two registers below on devices that leave it
+    # unimplemented.
     power_limit_active = bit(36, 0)
