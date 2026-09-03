@@ -195,11 +195,7 @@ async def read_unit(host: str, unit_id: int, args: argparse.Namespace) -> None:
             state = ac_dc.operating_state
             print(f"  operating state: {state.name if state is not None else None}")
             print(f"  vendor state:    {ac_dc.vendor_operating_state}")
-            print(
-                f"  events:          {ac_dc.events:#010x}"
-                if ac_dc.events is not None
-                else "  events:          None"
-            )
+            print(f"  events:          {ac_dc.events!r}")
 
         if (storage := inverter.storage) is not None:
             print("\nStorage:")

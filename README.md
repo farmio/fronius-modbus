@@ -30,7 +30,7 @@ needed — and the data type setting is detected automatically.
 - SunSpec **inverter models (101-103 / 111-113)** in both encodings:
   AC power, frequency, lifetime energy, per-phase currents and voltages,
   apparent/reactive power, power factor, DC totals, operating state and
-  vendor state, event flags as a typed flag set.
+  vendor state, typed event flags.
 - SunSpec **Multiple MPPT Inverter Extension Model (160)**: DC current, voltage,
   power and lifetime energy per MPP tracker, with module role classification
   (PV string / storage charge / storage discharge) and derived totals
