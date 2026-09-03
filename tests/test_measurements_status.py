@@ -17,7 +17,7 @@ async def _discovered_inverter(
     return inverter
 
 
-@pytest.mark.parametrize("ac_energy_total", [1, 1234, 50_000_000])
+@pytest.mark.parametrize("ac_energy_total", [1, 1234, 50_000_000, 5_000_000_000])
 async def test_ac_energy_total(
     mock_modbus_unit: MockModbusUnit, ac_energy_total: int
 ) -> None:
