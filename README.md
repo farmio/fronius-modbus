@@ -53,8 +53,9 @@ are read together with their scale factors so the two can never disagree.
 > MPPT model counts in `acc32` with a scale factor, so `pv_energy_total` and the
 > battery totals keep full resolution at any reading. Prefer them for lifetime
 > energy, or set the device to *int + SF*. The Measurements Status model's
-> `ac_energy_total` is the full-resolution `acc64` counterpart to the inverter
-> model's `energy_total`, covering the same AC-side total without quantising.
+> `ac_energy_total` is the full-resolution `acc64` version of the inverter
+> model's `energy_total`. It holds the same AC-side total but does not lose
+> precision at high readings.
 
 ## Writing
 
