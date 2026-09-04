@@ -1,4 +1,4 @@
-"""Tests for the Measurements_Status model (122)."""
+"""Tests for the Measurements Status model (122)."""
 
 import pytest
 from modbus_connection.mock import MockModbusUnit
