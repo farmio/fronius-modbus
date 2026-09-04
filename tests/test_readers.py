@@ -5,6 +5,7 @@ from modbus_connection.mock import MockModbusUnit
 
 from fronius_modbus import (
     FroniusModbusInverter,
+    InverterEvent,
     OperatingState,
     StorageState,
     SunSpecMapShiftError,
@@ -133,6 +134,68 @@ async def test_inverter_data_not_implemented(
     assert data.energy_total is None
     assert data.operating_state is None
     assert data.vendor_operating_state is None
+
+
+@pytest.mark.parametrize(
+    "float_mode",
+    [pytest.param(True, id="float"), pytest.param(False, id="int_sf")],
+)
+@pytest.mark.parametrize(
+    ("events", "expected_events"),
+    [
+        pytest.param(
+            0x82,
+            InverterEvent.OVER_TEMP | InverterEvent.DC_OVER_VOLT,
+            id="combined",
+        ),
+        pytest.param(0, InverterEvent(0), id="none"),
+        pytest.param(0x10000, InverterEvent(0x10000), id="reserved_bit"),
+    ],
+)
+async def test_inverter_events(
+    mock_modbus_unit: MockModbusUnit,
+    float_mode: bool,
+    events: int,
+    expected_events: InverterEvent,
+) -> None:
+    """Test the Evt1 bitfield decodes to typed flags in both encodings."""
+    mock_modbus_unit.holding.update(
+        build_sunspec_map(
+            [], float_mode=float_mode, inverter=InverterModelSpec(events=events)
+        )
+    )
+    inverter = FroniusModbusInverter(mock_modbus_unit)
+    await inverter.discover()
+
+    await inverter.async_update()
+    data = inverter.inverter
+    assert data is not None
+    assert isinstance(data.events, InverterEvent)
+    assert data.events == expected_events
+
+
+@pytest.mark.parametrize(
+    "float_mode",
+    [pytest.param(True, id="float"), pytest.param(False, id="int_sf")],
+)
+async def test_inverter_events_not_implemented(
+    mock_modbus_unit: MockModbusUnit, float_mode: bool
+) -> None:
+    """Test the not-implemented Evt1 sentinel decodes to None in both encodings."""
+    mock_modbus_unit.holding.update(
+        build_sunspec_map(
+            [],
+            float_mode=float_mode,
+            inverter=InverterModelSpec(events=0xFFFFFFFF),
+        )
+    )
+    inverter = FroniusModbusInverter(mock_modbus_unit)
+    await inverter.discover()
+
+    await inverter.async_update()
+    data = inverter.inverter
+    assert data is not None
+    assert data.events is None
 
 
 async def test_storage_data(mock_modbus_unit: MockModbusUnit) -> None:

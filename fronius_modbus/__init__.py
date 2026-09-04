@@ -10,6 +10,7 @@ from .controls import Controls
 from .inverter import GEN24_UNIT_ID, FroniusModbusInverter, datamanager_unit_id
 from .inverter_model import (
     Inverter,
+    InverterEvent,
     InverterFloat,
     InverterInteger,
     OperatingState,
@@ -26,6 +27,7 @@ __all__ = [
     "Controls",
     "FroniusModbusInverter",
     "Inverter",
+    "InverterEvent",
     "InverterFloat",
     "InverterInteger",
     "MeasurementsStatus",

@@ -9,7 +9,7 @@ not-implemented. Register addresses per the SunSpec model definitions,
 relative to the model start.
 """
 
-from enum import IntEnum
+from enum import IntEnum, IntFlag
 
 from modbus_connection.model import sunspec as sunspec_fields
 
@@ -27,6 +27,27 @@ class OperatingState(IntEnum):
     SHUTTING_DOWN = 6
     FAULT = 7
     STANDBY = 8
+
+
+class InverterEvent(IntFlag):
+    """SunSpec inverter event flags (Evt1)."""
+
+    GROUND_FAULT = 1 << 0
+    DC_OVER_VOLT = 1 << 1
+    AC_DISCONNECT = 1 << 2
+    DC_DISCONNECT = 1 << 3
+    GRID_DISCONNECT = 1 << 4
+    CABINET_OPEN = 1 << 5
+    MANUAL_SHUTDOWN = 1 << 6
+    OVER_TEMP = 1 << 7
+    OVER_FREQUENCY = 1 << 8
+    UNDER_FREQUENCY = 1 << 9
+    AC_OVER_VOLT = 1 << 10
+    AC_UNDER_VOLT = 1 << 11
+    BLOWN_STRING_FUSE = 1 << 12
+    UNDER_TEMP = 1 << 13
+    MEMORY_LOSS = 1 << 14
+    HW_TEST_FAILURE = 1 << 15
 
 
 class InverterFloat(SunSpecComponent):
@@ -53,7 +74,7 @@ class InverterFloat(SunSpecComponent):
     dc_power = sunspec_fields.float32(38, unit="W")
     operating_state = sunspec_fields.enum16(48, OperatingState)
     vendor_operating_state = sunspec_fields.enum16(49)
-    events = sunspec_fields.bitfield32(50)  # Evt1
+    events = sunspec_fields.bitfield32(50, InverterEvent)
 
 
 class InverterInteger(SunSpecComponent):
@@ -80,7 +101,7 @@ class InverterInteger(SunSpecComponent):
     dc_power = sunspec_fields.int16(31, scale_register=32, unit="W")
     operating_state = sunspec_fields.enum16(38, OperatingState)
     vendor_operating_state = sunspec_fields.enum16(39)
-    events = sunspec_fields.bitfield32(40)  # Evt1
+    events = sunspec_fields.bitfield32(40, InverterEvent)
 
 
 type Inverter = InverterFloat | InverterInteger
