@@ -92,6 +92,16 @@ async def test_no_mppt_model(mock_modbus_unit: MockModbusUnit) -> None:
     assert inverter.mppt is None
 
 
+async def test_no_measurements_status_model(mock_modbus_unit: MockModbusUnit) -> None:
+    """Test a device without model 122 in its chain."""
+    mock_modbus_unit.holding.update(
+        build_sunspec_map([], include_measurements_status=False)
+    )
+    inverter = FroniusModbusInverter(mock_modbus_unit, has_storage=False)
+    await inverter.discover()
+    assert inverter.measurements_status is None
+
+
 async def test_rediscovery_on_register_map_shift(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
