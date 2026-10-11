@@ -67,7 +67,10 @@ writes at all.
   limit the inverter output power.
 - **Basic Storage Control (124)**: `set_limits()` for the battery charge and
   discharge rates (including forced charging), plus `set_minimum_reserve()` and
-  `set_grid_charging()`.
+  `set_grid_charging()`. `set_forced_mode()` forces the battery to charge or
+  discharge through the rate of the opposite direction and leaves the limit of
+  the forced direction alone, which caps the forced power; `forced_mode` reads
+  back which way the battery is forced, whoever wrote the rates.
 
 The limit setters take a `revert_seconds` auto-revert, so a controller that dies
 cannot leave the inverter constrained.
