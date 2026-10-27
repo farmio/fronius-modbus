@@ -1,0 +1,20 @@
+name: Auto Label
+
+on:
+  # pull_request_target so that pull requests from forks get labelled too;
+  # safe here since the workflow never checks out or runs the PR's code
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  auto_label:
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: release-drafter/release-drafter/autolabeler@v7
+        with:
+          config-name: release-drafter.yml

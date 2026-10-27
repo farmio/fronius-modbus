@@ -1,0 +1,73 @@
+# Drafts the GitHub release notes from merged pull requests.
+# https://github.com/release-drafter/release-drafter
+#
+# Tags carry no "v" prefix: hatch-vcs derives the package version from the
+# tag and publish.yml compares the tag name against the built version.
+name-template: '$RESOLVED_VERSION'
+tag-template: '$RESOLVED_VERSION'
+
+categories:
+  - title: '💥 Breaking Changes'
+    # bumps the minor version while the project is at 0.x;
+    # switch to "major" with 1.0
+    semver-increment: minor
+    exclusive: true
+    when:
+      label: 'breaking-change'
+  - title: '🚀 Features'
+    semver-increment: minor
+    exclusive: true
+    when:
+      labels:
+        - 'enhancement'
+        - 'feature'
+  - title: '🐛 Bug Fixes'
+    exclusive: true
+    when:
+      labels:
+        - 'bug'
+        - 'fix'
+  - title: '📚 Documentation'
+    exclusive: true
+    when:
+      label: 'documentation'
+  - title: '⬆️ Dependencies'
+    collapse-after: 3
+    exclusive: true
+    when:
+      label: 'dependencies'
+  - title: '🧰 Maintenance'
+    exclusive: true
+    when:
+      labels:
+        - 'ci'
+        - 'maintenance'
+  # everything without a matching label
+  - title: '🔧 Other Changes'
+  # left out of the notes entirely
+  - type: 'pre-exclude'
+    when:
+      label: 'skip-changelog'
+  # fallback when no category sets an increment
+  - type: 'version-resolver'
+    semver-increment: patch
+
+change-template: '- $TITLE (#$NUMBER) $AUTHORS'
+# Add # and @ to prevent mentions. Add ` to prevent code blocks.
+change-title-escapes: '\<*_&'
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...$RESOLVED_TAG
+
+# Labels added to pull requests by the Auto Label workflow
+autolabeler:
+  - labels: ['documentation']
+    files:
+      - '*.md'
+  - labels: ['ci']
+    files:
+      - '.github/**'
