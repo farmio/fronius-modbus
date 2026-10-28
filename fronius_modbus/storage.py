@@ -69,12 +69,35 @@ class Storage(SunSpecComponent):
         await self.async_update()
         if revert_seconds:
             await self.write("revert_seconds", revert_seconds)
-        if charge is not None:
-            await self.write("charge_limit", charge)
-        if discharge is not None:
-            await self.write("discharge_limit", discharge)
-        await self.write("charge_limit_enabled", charge is not None)
-        await self.write("discharge_limit_enabled", discharge is not None)
+        # With both limits enabled the device refuses an empty window - a
+        # charge rate below the negated discharge rate, both negative for
+        # one. It checks when a limit is enabled, so a limit going off is
+        # disabled first, the rates follow with a negative one last, and a
+        # limit going on is enabled after them.
+        enabled = {
+            "charge_limit_enabled": charge is not None,
+            "discharge_limit_enabled": discharge is not None,
+        }
+        rates = [
+            (field, limit)
+            for field, limit in (
+                ("charge_limit", charge),
+                ("discharge_limit", discharge),
+            )
+            if limit is not None
+        ]
+        for enable_field, on in enabled.items():
+            if not on:
+                await self.write(enable_field, False)
+        for field, limit in rates:
+            if limit >= 0:
+                await self.write(field, limit)
+        for field, limit in rates:
+            if limit < 0:
+                await self.write(field, limit)
+        for enable_field, on in enabled.items():
+            if on:
+                await self.write(enable_field, True)
 
     async def set_minimum_reserve(self, percent: float) -> None:
         """Set the minimum state of charge reserve in percent."""
