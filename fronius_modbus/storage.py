@@ -61,7 +61,8 @@ class Storage(SunSpecComponent):
 
         ``None`` deactivates the respective limit. Negative values force
         charging / discharging. ``revert_seconds`` > 0 auto-reverts the
-        limits if they aren't refreshed; support varies by device generation.
+        limits unless one is written again within the period - reading the
+        model does not restart it, whatever the Fronius manual says.
         """
         for limit in (charge, discharge):
             if limit is not None and not -100 <= limit <= 100:
