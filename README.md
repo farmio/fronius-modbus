@@ -72,9 +72,11 @@ writes at all.
 The limit setters take a `revert_seconds` auto-revert, so a controller that dies
 cannot leave the inverter constrained. Only writing a limit again restarts its
 period: Fronius documents every received Modbus message as restarting it, but a
-GEN24 drops the limit on time while being read. A controller that keeps a limit
-in force has to write it again within the period (measured with
-`scripts/check_storage_revert.py`).
+GEN24 drops the limit on time while being read (measured with
+`scripts/check_storage_revert.py`). A controller that keeps a limit in force
+calls `Controls.refresh_power_limit()` / `Storage.refresh_limits()` well before
+the period is up; they send the active limits again and report whether any was
+in force, so a limit released on the device is left released.
 
 ## Usage
 
