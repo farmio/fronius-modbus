@@ -1,0 +1,8 @@
+# Keeps the GitHub Actions pins current, so runtime deprecations like the
+# Node.js 20 one show up as pull requests instead of workflow warnings.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
