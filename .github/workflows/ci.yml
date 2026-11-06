@@ -38,6 +38,21 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
+  lowest:
+    # the floors in pyproject.toml are only a claim otherwise: the lockfile
+    # pins the newest versions, so a change could quietly need a newer
+    # modbus-connection than the floor says
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - name: Run tests on the lowest allowed versions
+        run: |
+          uv sync --resolution lowest-direct
+          uv run --no-sync pytest
+
   coverage:
     needs: test
     runs-on: ubuntu-latest
