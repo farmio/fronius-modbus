@@ -25,7 +25,7 @@ jobs:
             exit 1
           fi
           echo "Publishing ${built}"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -38,7 +38,7 @@ jobs:
       # required for PyPI trusted publishing
       id-token: write
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
