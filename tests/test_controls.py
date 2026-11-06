@@ -2,7 +2,7 @@
 
 import pytest
 from modbus_connection import ModbusExceptionError
-from modbus_connection.mock import MockModbusUnit
+from modbus_connection.mock import MockModbusUnit, WriteEvent
 
 from fronius_modbus import (
     Controls,
@@ -231,3 +231,130 @@ async def test_write_after_register_map_shift(
     data_address = _model_data_address(inverter, IMMEDIATE_CONTROLS_MODEL_ID)
     assert mock_modbus_unit.holding[data_address + 3] == 8000
     assert mock_modbus_unit.holding[data_address + 7] == 1
+
+
+async def test_refresh_power_limit_restarts_the_period(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Test an active power limit is sent again, period included."""
+    inverter = await _discovered_inverter(mock_modbus_unit, build_sunspec_map([]))
+    controls = _controls(inverter)
+    data_address = _model_data_address(inverter, IMMEDIATE_CONTROLS_MODEL_ID)
+    await controls.set_power_limit(60.0, revert_seconds=120)
+    # something else shortened the period on the device
+    mock_modbus_unit.holding[data_address + 5] = 30
+    writes: list[WriteEvent] = []
+    mock_modbus_unit.on_write(writes.append)
+
+    assert await controls.refresh_power_limit(revert_seconds=120) is True
+
+    assert len(writes) == 3
+    assert mock_modbus_unit.holding[data_address + 5] == 120  # RvrtTms
+    await controls.async_update()
+    assert controls.power_limit == 60.0
+    assert controls.enabled is True
+
+
+@pytest.mark.parametrize(
+    "released_on_device",
+    [
+        pytest.param(False, id="never_set"),
+        pytest.param(True, id="released_on_device"),
+    ],
+)
+async def test_refresh_power_limit_leaves_a_released_limit_alone(
+    mock_modbus_unit: MockModbusUnit, released_on_device: bool
+) -> None:
+    """Test no limit is sent while none is in force on the device.
+
+    A limit released on the device since the last update is found by the
+    fresh read and not taken back.
+    """
+    inverter = await _discovered_inverter(mock_modbus_unit, build_sunspec_map([]))
+    controls = _controls(inverter)
+    data_address = _model_data_address(inverter, IMMEDIATE_CONTROLS_MODEL_ID)
+    if released_on_device:
+        await controls.set_power_limit(60.0, revert_seconds=120)
+        mock_modbus_unit.holding[data_address + 7] = 0  # WMaxLim_Ena
+    writes: list[WriteEvent] = []
+    mock_modbus_unit.on_write(writes.append)
+
+    assert await controls.refresh_power_limit(revert_seconds=120) is False
+
+    assert not writes
+    assert controls.enabled is False
+
+
+async def test_refresh_power_limit_rejects_a_bad_period(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Test the period is validated before anything is read or written."""
+    inverter = await _discovered_inverter(mock_modbus_unit, build_sunspec_map([]))
+    controls = _controls(inverter)
+
+    with pytest.raises(ValueError, match="revert_seconds out of range"):
+        await controls.refresh_power_limit(revert_seconds=0x10000)
+
+
+@pytest.mark.parametrize(
+    ("charge", "discharge", "expected_mode"),
+    [
+        pytest.param(50.0, None, 0b01, id="charge"),
+        pytest.param(None, -40.0, 0b10, id="forced_charge"),
+        pytest.param(50.0, 0.0, 0b11, id="both"),
+    ],
+)
+async def test_refresh_limits_restarts_the_period(
+    mock_modbus_unit: MockModbusUnit,
+    charge: float | None,
+    discharge: float | None,
+    expected_mode: int,
+) -> None:
+    """Test the active battery limits are sent again, period included."""
+    inverter = await _discovered_inverter(
+        mock_modbus_unit, build_sunspec_map([], storage_wcha_max=12800)
+    )
+    storage = _storage(inverter)
+    data_address = _model_data_address(inverter, STORAGE_MODEL_ID)
+    await storage.set_limits(charge=charge, discharge=discharge, revert_seconds=120)
+    mock_modbus_unit.holding[data_address + 13] = 30
+    writes: list[WriteEvent] = []
+    mock_modbus_unit.on_write(writes.append)
+
+    assert await storage.refresh_limits(revert_seconds=120) is True
+
+    # the period, each active limit and the shared switch register
+    assert len(writes) == 2 + (charge is not None) + (discharge is not None)
+    assert mock_modbus_unit.holding[data_address + 13] == 120  # RvrtTms
+    assert mock_modbus_unit.holding[data_address + 3] == expected_mode  # StorCtl_Mod
+    await storage.async_update()
+    assert storage.charge_limit == (charge if charge is not None else 0.0)
+    assert storage.discharge_limit == (discharge if discharge is not None else 0.0)
+
+
+@pytest.mark.parametrize(
+    "released_on_device",
+    [
+        pytest.param(False, id="never_set"),
+        pytest.param(True, id="released_on_device"),
+    ],
+)
+async def test_refresh_limits_leaves_released_limits_alone(
+    mock_modbus_unit: MockModbusUnit, released_on_device: bool
+) -> None:
+    """Test no battery limit is sent while none is in force on the device."""
+    inverter = await _discovered_inverter(
+        mock_modbus_unit, build_sunspec_map([], storage_wcha_max=12800)
+    )
+    storage = _storage(inverter)
+    data_address = _model_data_address(inverter, STORAGE_MODEL_ID)
+    if released_on_device:
+        await storage.set_limits(charge=50.0, revert_seconds=120)
+        mock_modbus_unit.holding[data_address + 3] = 0  # StorCtl_Mod
+    writes: list[WriteEvent] = []
+    mock_modbus_unit.on_write(writes.append)
+
+    assert await storage.refresh_limits(revert_seconds=120) is False
+
+    assert not writes
+    assert storage.charge_limit_enabled is False
