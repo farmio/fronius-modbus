@@ -12,11 +12,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: Ruff check
-        run: uv run ruff check .
+        run: uv run --locked ruff check .
       - name: Ruff format
-        run: uv run ruff format --check .
+        run: uv run --locked ruff format --check .
       - name: Mypy
-        run: uv run mypy fronius_modbus
+        run: uv run --locked mypy fronius_modbus
 
   test:
     runs-on: ubuntu-latest
@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Run tests
-        run: uv run coverage run -m pytest
+        run: uv run --locked coverage run -m pytest
       - name: Upload coverage data
         uses: actions/upload-artifact@v7
         with:
@@ -51,11 +51,11 @@ jobs:
           merge-multiple: true
       - name: Combine coverage and report
         run: |
-          uv run coverage combine
-          uv run coverage html --skip-covered --skip-empty
-          uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+          uv run --locked coverage combine
+          uv run --locked coverage html --skip-covered --skip-empty
+          uv run --locked coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
           # fails the job below the fail_under threshold in pyproject.toml
-          uv run coverage report
+          uv run --locked coverage report
       - name: Upload HTML report
         if: ${{ failure() }}
         uses: actions/upload-artifact@v7
