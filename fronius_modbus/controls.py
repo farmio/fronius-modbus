@@ -27,8 +27,9 @@ class Controls(SunSpecComponent):
     async def set_power_limit(self, percent: float, *, revert_seconds: int = 0) -> None:
         """Limit output power to ``percent`` of the nominal power and enable.
 
-        ``revert_seconds`` > 0 auto-reverts the limit if it isn't refreshed -
-        a safety net for controllers that may die; 0 keeps it until disabled.
+        ``revert_seconds`` > 0 auto-reverts the limit unless it is written
+        again within the period - a safety net for controllers that may die;
+        reading does not restart it. 0 keeps the limit until disabled.
         """
         if not 0 <= percent <= 100:
             raise ValueError(f"power limit out of range 0-100: {percent}")
