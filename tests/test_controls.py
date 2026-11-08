@@ -157,6 +157,121 @@ async def test_forced_charging(mock_modbus_unit: MockModbusUnit) -> None:
     assert storage.discharge_limit_enabled is True
 
 
+def _signed(word: object) -> int:
+    assert isinstance(word, int)
+    return word - 0x10000 if word & 0x8000 else word
+
+
+def _refuse_empty_window(unit: MockModbusUnit, data_address: int) -> None:
+    """Fail a write that leaves a state a Gen24 refuses.
+
+    With both limits enabled, battery power has to fit between the negated
+    discharge rate and the charge rate - measured: both -30% is refused,
+    40% / -100% is refused, 40% / -40% charges at 40%. With one limit
+    enabled any rates are taken.
+    """
+    states: list[tuple[int, int, int]] = []
+
+    def check(_event: WriteEvent) -> None:
+        mode = unit.holding[data_address + 3]  # StorCtl_Mod
+        assert isinstance(mode, int)
+        charge = _signed(unit.holding[data_address + 11])  # InWRte
+        discharge = _signed(unit.holding[data_address + 10])  # OutWRte
+        states.append((mode & 0b11, charge, discharge))
+        assert mode & 0b11 != 0b11 or charge + discharge >= 0, states
+
+    unit.on_write(check)
+
+
+async def test_reversing_limits_never_sets_both_negative(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Test the negative rate is written last when the direction reverses."""
+    inverter = await _discovered_inverter(
+        mock_modbus_unit, build_sunspec_map([], storage_wcha_max=12800)
+    )
+    storage = _storage(inverter)
+    data_address = _model_data_address(inverter, STORAGE_MODEL_ID)
+    await storage.set_limits(charge=100.0, discharge=-100.0)
+    _refuse_empty_window(mock_modbus_unit, data_address)
+
+    await storage.set_limits(charge=-100.0, discharge=100.0)
+
+    await storage.async_update()
+    assert storage.charge_limit == -100.0
+    assert storage.discharge_limit == 100.0
+
+
+@pytest.mark.parametrize(
+    ("start", "target"),
+    [((40.0, -40.0), (20.0, -20.0)), ((20.0, -20.0), (40.0, -40.0))],
+)
+async def test_changing_forced_rates_never_leaves_an_empty_window(
+    mock_modbus_unit: MockModbusUnit,
+    start: tuple[float, float],
+    target: tuple[float, float],
+) -> None:
+    """Test the write order follows the rates while both limits stay enabled.
+
+    Neither rate can go first in every case: lowering a forced charge needs
+    the discharge rate first, raising it the charge rate.
+    """
+    inverter = await _discovered_inverter(
+        mock_modbus_unit, build_sunspec_map([], storage_wcha_max=12800)
+    )
+    storage = _storage(inverter)
+    data_address = _model_data_address(inverter, STORAGE_MODEL_ID)
+    await storage.set_limits(charge=start[0], discharge=start[1])
+    _refuse_empty_window(mock_modbus_unit, data_address)
+
+    await storage.set_limits(charge=target[0], discharge=target[1])
+
+    await storage.async_update()
+    assert (storage.charge_limit, storage.discharge_limit) == target
+
+
+async def test_limits_leaving_an_empty_window_write_nothing(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Test limits the device refuses raise before anything is written."""
+    inverter = await _discovered_inverter(
+        mock_modbus_unit, build_sunspec_map([], storage_wcha_max=12800)
+    )
+    storage = _storage(inverter)
+    writes: list[WriteEvent] = []
+    mock_modbus_unit.on_write(writes.append)
+
+    with pytest.raises(ValueError, match="empty window"):
+        await storage.set_limits(charge=40.0, discharge=-100.0)
+
+    assert writes == []
+
+
+async def test_reversing_a_single_limit_never_leaves_an_empty_window(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Test the limit going off is disabled before the other goes negative.
+
+    Measured on a Gen24: from forced charging at -30%, disabling the
+    discharge limit first, then writing the charge rate -30% and enabling
+    it, is taken and discharges at 30%.
+    """
+    inverter = await _discovered_inverter(
+        mock_modbus_unit, build_sunspec_map([], storage_wcha_max=12800)
+    )
+    storage = _storage(inverter)
+    data_address = _model_data_address(inverter, STORAGE_MODEL_ID)
+    await storage.set_limits(discharge=-30.0)
+    _refuse_empty_window(mock_modbus_unit, data_address)
+
+    await storage.set_limits(charge=-30.0)
+
+    await storage.async_update()
+    assert storage.charge_limit == -30.0
+    assert storage.charge_limit_enabled is True
+    assert storage.discharge_limit_enabled is False
+
+
 async def test_clear_storage_limits(mock_modbus_unit: MockModbusUnit) -> None:
     """Test deactivating all storage limits."""
     inverter = await _discovered_inverter(
