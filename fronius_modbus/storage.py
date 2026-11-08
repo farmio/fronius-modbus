@@ -66,34 +66,32 @@ class Storage(SunSpecComponent):
         for limit in (charge, discharge):
             if limit is not None and not -100 <= limit <= 100:
                 raise ValueError(f"limit out of range -100..100: {limit}")
+        if charge is not None and discharge is not None and charge + discharge < 0:
+            raise ValueError(
+                f"limits leave an empty window: charge {charge}, discharge {discharge}"
+            )
         await self.async_update()
         if revert_seconds:
             await self.write("revert_seconds", revert_seconds)
         # With both limits enabled the device refuses an empty window - a
         # charge rate below the negated discharge rate, both negative for
         # one. It checks when a limit is enabled, so a limit going off is
-        # disabled first, the rates follow with a negative one last, and a
-        # limit going on is enabled after them.
+        # disabled first and a limit going on is enabled last. With both
+        # staying on, the rates go in the order that keeps the window open:
+        # new charge + old discharge and old charge + new discharge sum up
+        # to the old window plus the new one, so one of them is not negative.
         enabled = {
             "charge_limit_enabled": charge is not None,
             "discharge_limit_enabled": discharge is not None,
         }
-        rates = [
-            (field, limit)
-            for field, limit in (
-                ("charge_limit", charge),
-                ("discharge_limit", discharge),
-            )
-            if limit is not None
-        ]
+        rates = [("charge_limit", charge), ("discharge_limit", discharge)]
+        if charge is not None and charge + (self.discharge_limit or 0) < 0:
+            rates.reverse()
         for enable_field, on in enabled.items():
             if not on:
                 await self.write(enable_field, False)
         for field, limit in rates:
-            if limit >= 0:
-                await self.write(field, limit)
-        for field, limit in rates:
-            if limit < 0:
+            if limit is not None:
                 await self.write(field, limit)
         for enable_field, on in enabled.items():
             if on:

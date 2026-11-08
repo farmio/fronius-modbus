@@ -202,6 +202,51 @@ async def test_reversing_limits_never_sets_both_negative(
     assert storage.discharge_limit == 100.0
 
 
+@pytest.mark.parametrize(
+    ("start", "target"),
+    [((40.0, -40.0), (20.0, -20.0)), ((20.0, -20.0), (40.0, -40.0))],
+)
+async def test_changing_forced_rates_never_leaves_an_empty_window(
+    mock_modbus_unit: MockModbusUnit,
+    start: tuple[float, float],
+    target: tuple[float, float],
+) -> None:
+    """Test the write order follows the rates while both limits stay enabled.
+
+    Neither rate can go first in every case: lowering a forced charge needs
+    the discharge rate first, raising it the charge rate.
+    """
+    inverter = await _discovered_inverter(
+        mock_modbus_unit, build_sunspec_map([], storage_wcha_max=12800)
+    )
+    storage = _storage(inverter)
+    data_address = _model_data_address(inverter, STORAGE_MODEL_ID)
+    await storage.set_limits(charge=start[0], discharge=start[1])
+    _refuse_empty_window(mock_modbus_unit, data_address)
+
+    await storage.set_limits(charge=target[0], discharge=target[1])
+
+    await storage.async_update()
+    assert (storage.charge_limit, storage.discharge_limit) == target
+
+
+async def test_limits_leaving_an_empty_window_write_nothing(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Test limits the device refuses raise before anything is written."""
+    inverter = await _discovered_inverter(
+        mock_modbus_unit, build_sunspec_map([], storage_wcha_max=12800)
+    )
+    storage = _storage(inverter)
+    writes: list[WriteEvent] = []
+    mock_modbus_unit.on_write(writes.append)
+
+    with pytest.raises(ValueError, match="empty window"):
+        await storage.set_limits(charge=40.0, discharge=-100.0)
+
+    assert writes == []
+
+
 async def test_reversing_a_single_limit_never_leaves_an_empty_window(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
