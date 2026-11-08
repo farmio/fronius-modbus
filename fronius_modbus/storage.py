@@ -61,7 +61,8 @@ class Storage(SunSpecComponent):
 
         ``None`` deactivates the respective limit. Negative values force
         charging / discharging. ``revert_seconds`` > 0 auto-reverts the
-        limits if they aren't refreshed; support varies by device generation.
+        limits unless one is written again within the period - reading the
+        model does not restart it, whatever the Fronius manual says.
         """
         for limit in (charge, discharge):
             if limit is not None and not -100 <= limit <= 100:
@@ -96,6 +97,29 @@ class Storage(SunSpecComponent):
         for enable_field, on in enabled.items():
             if on:
                 await self.write(enable_field, True)
+
+    async def refresh_limits(self, *, revert_seconds: int) -> bool:
+        """Send the active charge / discharge limits again to restart the period.
+
+        The storage counterpart of ``Controls.refresh_power_limit``: decided
+        on a fresh read, returns whether a limit was in force, and writes the
+        period along with the limits.
+        """
+        await self.async_update()
+        charge_on = self.charge_limit_enabled is True
+        discharge_on = self.discharge_limit_enabled is True
+        if not charge_on and not discharge_on:
+            return False
+        await self.write("revert_seconds", revert_seconds)
+        if charge_on and self.charge_limit is not None:
+            await self.write("charge_limit", self.charge_limit)
+        if discharge_on and self.discharge_limit is not None:
+            await self.write("discharge_limit", self.discharge_limit)
+        # both switches share one register, so one merging write re-sends both
+        await self.write(
+            "charge_limit_enabled" if charge_on else "discharge_limit_enabled", True
+        )
+        return True
 
     async def set_minimum_reserve(self, percent: float) -> None:
         """Set the minimum state of charge reserve in percent."""

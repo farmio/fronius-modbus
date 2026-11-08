@@ -9,14 +9,14 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
       - name: Ruff check
-        run: uv run ruff check .
+        run: uv run --locked ruff check .
       - name: Ruff format
-        run: uv run ruff format --check .
+        run: uv run --locked ruff format --check .
       - name: Mypy
-        run: uv run mypy fronius_modbus
+        run: uv run --locked mypy fronius_modbus
 
   test:
     runs-on: ubuntu-latest
@@ -24,41 +24,56 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Run tests
-        run: uv run coverage run -m pytest
+        run: uv run --locked coverage run -m pytest
       - name: Upload coverage data
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-data-${{ matrix.python-version }}
           path: .coverage.*
           include-hidden-files: true
           if-no-files-found: error
 
+  lowest:
+    # the floors in pyproject.toml are only a claim otherwise: the lockfile
+    # pins the newest versions, so a change could quietly need a newer
+    # modbus-connection than the floor says
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - name: Run tests on the lowest allowed versions
+        run: |
+          uv sync --resolution lowest-direct
+          uv run --no-sync pytest
+
   coverage:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
       - name: Download coverage data
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: coverage-data-*
           merge-multiple: true
       - name: Combine coverage and report
         run: |
-          uv run coverage combine
-          uv run coverage html --skip-covered --skip-empty
-          uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+          uv run --locked coverage combine
+          uv run --locked coverage html --skip-covered --skip-empty
+          uv run --locked coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
           # fails the job below the fail_under threshold in pyproject.toml
-          uv run coverage report
+          uv run --locked coverage report
       - name: Upload HTML report
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-html
           path: htmlcov

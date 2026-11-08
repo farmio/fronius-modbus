@@ -27,8 +27,9 @@ class Controls(SunSpecComponent):
     async def set_power_limit(self, percent: float, *, revert_seconds: int = 0) -> None:
         """Limit output power to ``percent`` of the nominal power and enable.
 
-        ``revert_seconds`` > 0 auto-reverts the limit if it isn't refreshed -
-        a safety net for controllers that may die; 0 keeps it until disabled.
+        ``revert_seconds`` > 0 auto-reverts the limit unless it is written
+        again within the period - a safety net for controllers that may die;
+        reading does not restart it. 0 keeps the limit until disabled.
         """
         if not 0 <= percent <= 100:
             raise ValueError(f"power limit out of range 0-100: {percent}")
@@ -38,6 +39,25 @@ class Controls(SunSpecComponent):
         await self.write("revert_seconds", revert_seconds)
         await self.write("power_limit", percent)
         await self.write("enabled", 1)
+
+    async def refresh_power_limit(self, *, revert_seconds: int) -> bool:
+        """Send an active power limit again to restart its fallback period.
+
+        Only a write restarts the period, so a controller keeping a limit in
+        force calls this well before the period is up. Decided on a fresh
+        read: a limit released on the device since the last update is left
+        released. Returns whether a limit was in force. The period is written
+        too, which corrects one changed on the device along the way.
+        """
+        if not 0 <= revert_seconds <= 0xFFFF:
+            raise ValueError(f"revert_seconds out of range: {revert_seconds}")
+        await self.async_update()
+        if not self.enabled or (limit := self.power_limit) is None:
+            return False
+        await self.write("revert_seconds", revert_seconds)
+        await self.write("power_limit", limit)
+        await self.write("enabled", 1)
+        return True
 
     async def clear_power_limit(self) -> None:
         """Disable the output power limit."""

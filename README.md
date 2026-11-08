@@ -70,7 +70,13 @@ writes at all.
   `set_grid_charging()`.
 
 The limit setters take a `revert_seconds` auto-revert, so a controller that dies
-cannot leave the inverter constrained.
+cannot leave the inverter constrained. Only writing a limit again restarts its
+period: Fronius documents every received Modbus message as restarting it, but a
+GEN24 drops the limit on time while being read (measured with
+`scripts/check_storage_revert.py`). A controller that keeps a limit in force
+calls `Controls.refresh_power_limit()` / `Storage.refresh_limits()` well before
+the period is up; they send the active limits again and report whether any was
+in force, so a limit released on the device is left released.
 
 ## Usage
 
@@ -143,6 +149,15 @@ status feedback:
 
 ```bash
 uv run scripts/monitor.py <inverter-ip> --interval 2
+```
+
+`check_storage_revert.py` — probes how the inverter handles the battery limit
+auto-revert: whether the period is honoured at all, and whether reads or only
+writes restart it. Behaviour-neutral (it enables the charge limit at 100 %) and
+restores what it found; about five minutes with the default period:
+
+```bash
+uv run scripts/check_storage_revert.py <inverter-ip> --period 60
 ```
 
 > Write commands require "inverter control via Modbus" to be enabled on the

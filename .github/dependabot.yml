@@ -1,0 +1,24 @@
+# Keeps the GitHub Actions pins and the lockfile current, so a new ruff,
+# mypy or modbus-connection release gets a CI run even in months nothing
+# else changes here. The ranges in pyproject.toml are the library's contract
+# with its consumers and are only changed by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: monthly
+    versioning-strategy: lockfile-only
+    groups:
+      # one pull request for the tooling, modbus-connection gets its own
+      dev-tools:
+        patterns:
+          - coverage
+          - mypy
+          - pytest*
+          - ruff
+          - textual*
